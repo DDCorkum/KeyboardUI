@@ -1,0 +1,11 @@
+## Interface: 90105
+## Title: KeyboardUI
+## Notes: Keyboard user interface with text to speech
+## Author: Dahk Celes (DDCorkum)
+## X-License: GNU Lesser-GPL
+## Version: 0.2
+## SavedVariables: KeyboardUIOptions
+
+KeyboardUI.lua
+KeyboardUI_StaticPopup.lua
+KeyboardUI_QuestLog.lua
