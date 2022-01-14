@@ -8,7 +8,7 @@
 This addon is made in partnership with WoWAccess by RogueEugor (A. Agostino).  The two addons may function alongside each other.
 Please note that WoWAccess is copyleft via GPL, while KeyboardUI remains all rights reserved
 
-Permission is granted to redistribute without modification in locations aimed principally at persons with blindness or low vision.
+Permission is granted to redistribute without modification outside the traditional WoW ecosystem in locations aimed principally at persons with blindness or low vision.
 This includes redistributing inside a zip folder containing multiple addons for assisted play, such as but not limited to WoWAccess.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
@@ -18,6 +18,9 @@ IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
 OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
+
+0.3 (2022-01-13) by Dahk Celes
+- Small tweaks and bug fixes.  First version to be publicly visible.
 
 0.2 (2022-01-12) by Dahk Celes
 - Rewrote the core addon using lessons learned from the proof of concept.
@@ -331,8 +334,13 @@ frame:SetScript("OnEvent", function(__, event, arg1)
 			end
 		end
 	elseif event == "PLAYER_LOGIN" then
-		C_Timer.After(3, function()
-			modules[1]:ttsQueue("For help with Keyboard UI, type: slash, K, U, I.", KUI_NORMAL, KUI_PP)
+		C_Timer.After(5, function()
+			if KeyboardUIOptions.global.notFirstTime then
+				modules[1]:ttsQueue("For help with Keyboard UI, type: slash, K, U, I.", KUI_NORMAL, KUI_PP)
+			else
+				KeyboardUIOptions.global.notFirstTime = true
+				modules[1]:ttsInterrupt([=[<speak>Welcome to Keyboard UI. <silence msec="500"/> For help, type: slash Keyboard UI, all as one word.  Alternatively, type: slash, K, U, I.</speak>]=], KUI_CASUAL, KUI_P)
+			end
 		end)
 	end
 end)
@@ -476,7 +484,10 @@ function lib:ttsQueue(text, rate, dynamics, useAltVoice)
 		if rate == nil or rate > 0 then
 			rate = floor((rate or KUI_NORMAL) * self:getOption("speed"))
 		end
-		tinsert(ttsFrame, {useAltVoice and KUI_VOICE_ALT or KUI_VOICE, text:gsub("[\<\>]", " "), Enum.VoiceTtsDestination.QueuedLocalPlayback, rate, volume})
+		if text:sub(1,1) == "<" and not text:sub(1,7) == "<speak>" then
+			text = text:gsub("[\<\>]", " -- ")
+		end
+		tinsert(ttsFrame, {useAltVoice and KUI_VOICE_ALT or KUI_VOICE, text, Enum.VoiceTtsDestination.QueuedLocalPlayback, rate, volume})
 		ttsFrame:Show()
 	end
 end
@@ -566,7 +577,7 @@ CreateFrame("Button", "KeyboardUIBackwardButton")
 KeyboardUIBackwardButton:SetScript("OnClick", function()
 	local module = getCurrentModule()
 	if module and module:RefreshEntry() then
-		local intro, body, concl = module:Forward()
+		local intro, body, concl = module:Backward()
 		module:ttsInterrupt(intro, KUI_QUICK, KUI_MF)
 		module:ttsQueue(body, KUI_CASUAL, KUI_MP)
 		module:ttsQueue(concl, KUI_NORMAL, KUI_MF)
@@ -1041,14 +1052,7 @@ scrollChild:SetScript("OnShow", function()
 		end
 	end
 	
-	-- give the user a hint
-	modules[1]:ttsInterrupt("Keyboard UI options.", KUI_NORMAL, KUI_MP)
-	modules[1]:ttsQueue(KeyboardUIOptions.global.bindingNextEntryButton .. " to go the next option.", KUI_NORMAL, KUI_MP)
-	modules[1]:ttsQueue(KeyboardUIOptions.global.bindingForwardButton .. " to move a slider forward.", KUI_NORMAL, KUI_MP)
-	modules[1]:ttsQueue(KeyboardUIOptions.global.bindingDoActionButton .. " to toggle a checkbox.", KUI_NORMAL, KUI_MP)
-	modules[1]:ttsQueue(KeyboardUIOptions.global.bindingDoAction5Button .. " to save the settings and exit.", KUI_NORMAL, KUI_MP)
-	modules[1]:ttsQueue("Finally, while this menu is open, press " .. KeyboardUIOptions.global.bindingActionsButton .. " for a list of hot keys.  (This list will change depending where you are in the menu.)", KUI_NORMAL, KUI_MP)
-	
+
 	-- now create the panel's functions, because its possible from this point forward for them to be called.
 	
 	local txtFuncs =
@@ -1224,6 +1228,28 @@ end)	-- end of scrollChild:OnShow()
 function SlashCmdList.KEYBOARDUI(msg)
 	InterfaceAddOnsList_Update()	-- https://github.com/Stanzilla/WoWUIBugs/issues/89
 	InterfaceOptionsFrame_OpenToCategory(panel)
+	
+	-- give the user a hint
+	modules[1]:ttsStop()
+	local hintText = [=[<speak>Keyboard UI Options.  Keyboard UI has various keybindings which activate only when a Keyboard-enabled window appears.
+<silence msec="500" />The first keybinds are for movement: %1$s, %2$s, %5$s and %6$s.  You always start at the top of a window, so %1$s moves to the next option and %2$s moves back one.  It is also possible to jump to sections with %3$s and %4$s.
+<silence msec="500" />Next, once you have reached the desired option, use %5$s, %6$s and %7$s to change it.  If its a number on a sliding scale, move the slider with %5$s and %6$s.  If its a checkbutton, toggle it with %7$s.  If its a more complex option with many actions, use %5$s and %6$s to cycle through the possibilities and %7$s to make the selection.
+<silence msec="500" />The next set of keybinds are hot keys such as %11$s and %10$s.  These hot keys change meaning depending which option you are at.  At any time, press %8$s to read out the list of available hot keys.  Of note, %10$s is the hot key to save settings and exit.
+<silence msec="500" />While you are at an option, another thing you may query it for more detail.  Press %9$s to request a full-length description. In fact, if you are unsure of what to do, both %9$s and %8$s are always safe choices because they simply read information without changing anything.</speak>]=]
+	
+	modules[1]:ttsInterrupt(hintText:format(
+		KeyboardUIOptions.global.bindingNextEntryButton, -- 1
+		KeyboardUIOptions.global.bindingPrevEntryButton, -- 2
+		KeyboardUIOptions.global.bindingNextGroupButton, -- 3
+		KeyboardUIOptions.global.bindingPrevGroupButton, -- 4
+		KeyboardUIOptions.global.bindingForwardButton, -- 5
+		KeyboardUIOptions.global.bindingBackwardButton, -- 6
+		KeyboardUIOptions.global.bindingDoActionButton, -- 7
+		KeyboardUIOptions.global.bindingActionsButton, -- 8
+		KeyboardUIOptions.global.bindingReadDescriptionButton, -- 9
+		KeyboardUIOptions.global.bindingDoAction5Button, -- 10
+		KeyboardUIOptions.global.bindingDoAction1Button -- 11
+	), KUI_NORMAL, KUI_MP)
 end
 SLASH_KEYBOARDUI1 = "/keyboardui"
 SLASH_KEYBOARDUI2 = "/kui"
