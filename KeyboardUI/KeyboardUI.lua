@@ -19,6 +19,10 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+0.4 (2022-01-15) by Dahk Celes
+- Secure keybinds outside combat.
+- New module: drop down menus.
+
 0.3 (2022-01-13) by Dahk Celes
 - Small tweaks and bug fixes.  First version to be publicly visible.
 
@@ -139,26 +143,26 @@ KeyboardUI:RegisterModule(module, minorVersion)
 		
 	-- Methods that each module should overwrite as required. (Hint: they start with upper case.)
 		
-		-- title = module:NextGroup()							-- Go to the first entry in the next/prev group containing entries.  Defaults to Next/PrevEntry(), so override only if there is more than one group.  Return false to indicate failure.
-		-- title = module:PrevGroup()							-- Examples: paging in the merchant frame; collapsible headers in the quest log; and sections of settings in the interface options.
+		-- intro [, body, concl] = module:NextGroup()					-- Go to the first entry in the next/prev group containing entries.  Defaults to Next/PrevEntry(), so override only if there is more than one group.  Return false to indicate failure.
+		-- intro [, body, concl] = module:PrevGroup()					-- Examples: paging in the merchant frame; collapsible headers in the quest log; and sections of settings in the interface options.
 		
-		-- title = module:NextEntry()							-- Go to the first action in the nextprev entry containing actions.  Defaults to Forward/Backward(), so override only if there is more than one entry.  Return false to indicate failure.
-		-- title = module:PrevEntry()							-- Examples: each item in the merchant frame; each quest in the quest log; and each setting in the interface options.
+		-- intro [, body, concl] = module:NextEntry()					-- Go to the first action in the nextprev entry containing actions.  Defaults to Forward/Backward(), so override only if there is more than one entry.  Return false to indicate failure.
+		-- intro [, body, concl] = module:PrevEntry()					-- Examples: each item in the merchant frame; each quest in the quest log; and each setting in the interface options.
 				
-		-- title = module:RefreshEntry()						-- Confirm the current entry is valid, and if not, go to the most appropriate entry.  Defaults to NextEntry().  Return false to indicate failure.
-		-- description = module:GetEntryLongDescription()		-- Get a full-length description of the entry.
+		-- intro = module:RefreshEntry()								-- Confirm the current entry is valid, and if not, go to the most appropriate entry.  Defaults to NextEntry().  Return false to indicate failure.
+		-- intro [, body, concl] = module:GetEntryLongDescription()		-- Get a full-length description of the entry.
 		
-		-- title = module:Forward()								-- Cycle between available actions, or does an action going "forward" if the only choices are forward/backward.  Defaults to DoAction(), so override only if there is more than one action.   Return nil to indicate failure.
-		-- title = module:Backward()							-- Examples: choosing between tracking, sharing or abandoning a quest; choosing between different buttons in the StaticPopup; or immediately moving a slider forward and back.
+		-- intro [, body, concl] = module:Forward()						-- Cycle between available actions, or does an action going "forward" if the only choices are forward/backward.  Defaults to DoAction(), so override only if there is more than one action.   Return nil to indicate failure.
+		-- intro [, body, concl] = module:Backward()					-- Examples: choosing between tracking, sharing or abandoning a quest; choosing between different buttons in the StaticPopup; or immediately moving a slider forward and back.
 		
-		-- [title1, ...] = module:Actions()						-- REQUIRED.  Provide a list of up to five available actions.  If none are possible, return an empty string.
-		-- [result] = module:DoAction([index])					-- REQUIRED.  Do the action selected with Next/PrevAction(), or the indexth action returned by Actions().
+		-- title1, ..., title5 = module:Actions()						-- REQUIRED.  Provide a list of up to five available actions.  If none are possible, return an empty string.
+		-- [result] = module:DoAction([index])							-- REQUIRED.  Do the action selected with Next/PrevAction(), or the indexth action returned by Actions().
 
 		
 	-- Helper functions that should NOT be overwritten. (Hint: they start with lower case.)
 	
-		-- module:afterCombat(func, ...)							-- Call self:func(...) as soon as possible but outside combat lockdown
-		-- module:displayTooltip(text [, optLine1], ...)			-- NEEDS DOCUMENTATION		
+		-- module:afterCombat(func, ...)								-- Call self:func(...) as soon as possible but outside combat lockdown
+		-- module:displayTooltip(text [, optLine1], ...)				-- NEEDS DOCUMENTATION		
 	
 	-- Methods that each module may overwrite if desired. (Hint: they start with upper case.)
 	
@@ -180,26 +184,29 @@ local modulesByName = {}			-- modules in no particular order, to simplify gettin
 local shownModules = {}				-- the modules currently visible
 
 local function enableKeybindings()
-	-- todo: turn this into something that activates only when a frame is visible.
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextGroupButton, "KeyboardUINextGroupButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevGroupButton, "KeyboardUIPrevGroupButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextEntryButton, "KeyboardUINextEntryButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevEntryButton, "KeyboardUIPrevEntryButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingForwardButton, "KeyboardUIForwardButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingBackwardButton, "KeyboardUIBackwardButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoActionButton, "KeyboardUIDoActionButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingActionsButton, "KeyboardUIActionsButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction1Button, "KeyboardUIDoAction1Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction2Button, "KeyboardUIDoAction2Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction3Button, "KeyboardUIDoAction3Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction4Button, "KeyboardUIDoAction4Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction5Button, "KeyboardUIDoAction5Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadTitleButton, "KeyboardUIReadTitleButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadDescriptionButton, "KeyboardUIReadDescriptionButton", "LeftButton")	
+	if not InCombatLockdown() then
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextGroupButton, "KeyboardUINextGroupButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevGroupButton, "KeyboardUIPrevGroupButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextEntryButton, "KeyboardUINextEntryButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevEntryButton, "KeyboardUIPrevEntryButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingForwardButton, "KeyboardUIForwardButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingBackwardButton, "KeyboardUIBackwardButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoActionButton, "KeyboardUIDoActionButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingActionsButton, "KeyboardUIActionsButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction1Button, "KeyboardUIDoAction1Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction2Button, "KeyboardUIDoAction2Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction3Button, "KeyboardUIDoAction3Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction4Button, "KeyboardUIDoAction4Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction5Button, "KeyboardUIDoAction5Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadTitleButton, "KeyboardUIReadTitleButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadDescriptionButton, "KeyboardUIReadDescriptionButton", "LeftButton")
+	end
 end
 
 local function disableKeybindings()
-	ClearOverrideBindings(frame)
+	if not InCombatLockdown() then
+		ClearOverrideBindings(frame)
+	end
 end
 
 local stratas = {
@@ -220,6 +227,11 @@ local function moduleOnShow(frame)
 	if #shownModules == 0 then
 		shownModules[1] = module
 		enableKeybindings()
+		module:GainFocus()
+	elseif module.priority > shownModules[#shownModules].priority then
+		shownModules[#shownModules]:LoseFocus()
+		shownModules[#shownModules+1] = module
+		module:GainFocus()
 	else
 		local i = 1
 		while shownModules[i] and shownModules[i].priority < module.priority do
@@ -274,6 +286,9 @@ function KeyboardUI:RegisterModule(module, optIndex)
 	hooksecurefunc(module.frame, "SetFrameLevel", updatePriorityWhileVisible)
 end
 
+function lib:hasFocus()
+	return shownModules[#shownModules] == self
+end
 
 
 function lib:onOptionChanged(option, func, optArg)
@@ -311,6 +326,8 @@ end
 	
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
+frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+frame:RegisterEvent("PLAYER_REGEN_ENABLED")
 
 frame:SetScript("OnEvent", function(__, event, arg1)
 	if event == "ADDON_LOADED" then
@@ -342,6 +359,10 @@ frame:SetScript("OnEvent", function(__, event, arg1)
 				modules[1]:ttsInterrupt([=[<speak>Welcome to Keyboard UI. <silence msec="500"/> For help, type: slash Keyboard UI, all as one word.  Alternatively, type: slash, K, U, I.</speak>]=], KUI_CASUAL, KUI_P)
 			end
 		end)
+	elseif event == "PLAYER_REGEN_DISABLED" and #shownModules > 0 then
+		disableKeybindings()
+	elseif event == "PLAYER_REGEN_ENABLED" and #shownModules > 0 then
+		enableKeybindings()
 	end
 end)
 
@@ -372,6 +393,14 @@ end
 
 function lib:Init()
 	-- Fires when a module is permitted to begin accessing KeyboardUI saved variables using module:setOption().
+end
+
+function lib:GainFocus()
+	-- Fires when a module is now the target for keybindings.
+end
+
+function lib:LoseFocus()
+	-- Fires when a module is no longer the target for keybindings.
 end
 
 function lib:NextGroup(...)
@@ -489,6 +518,12 @@ function lib:ttsQueue(text, rate, dynamics, useAltVoice)
 		end
 		tinsert(ttsFrame, {useAltVoice and KUI_VOICE_ALT or KUI_VOICE, text, Enum.VoiceTtsDestination.QueuedLocalPlayback, rate, volume})
 		ttsFrame:Show()
+	end
+end
+
+function lib:ttsYield(...)
+	if not ttsFrame:IsShown() then
+		self:ttsQueue(...)
 	end
 end
 
@@ -1042,7 +1077,7 @@ scrollChild:SetScript("OnShow", function()
 		scrollChild[i][1].module = module
 		scrollChild[i]:SetHeight(scrollChild[i][1]:GetHeight() + 30)
 		scrollChild:SetHeight(scrollChild:GetHeight() + scrollChild[i][1]:GetHeight() + 30)
-		module:panelCheckButton("enabled", ENABLE .. " " .. module.name, "Enable " .. module.name .. " when " .. (module.frame:GetName() or "it") .. " appears.")
+		module:panelCheckButton("enabled", ENABLE .. " " .. (module.title or module.name), "Enable " .. (module.title or module.name) .. " when " .. (module.frame:GetName() or "it") .. " appears.")
 		module:panelSlider("volume", VOLUME, "Set the text to speech volume.", 0, 100, 25, "silent", "100%", "%d%%")
 		module:panelSlider("speed", SPEED, "Set the text to speech rate.", 0.8, 1.2, 0.2, "slower", "faster", "%.1f")
 		if savedForLater[module] then
@@ -1231,7 +1266,7 @@ function SlashCmdList.KEYBOARDUI(msg)
 	
 	-- give the user a hint
 	modules[1]:ttsStop()
-	local hintText = [=[<speak>Keyboard UI Options.  Keyboard UI has various keybindings which activate only when a Keyboard-enabled window appears.
+	local hintText = [=[<speak>Keyboard UI Options.  Keyboard UI has various keybindings which activate only when Keyboard-enabled window appears outside of combat.
 <silence msec="500" />The first keybinds are for movement: %1$s, %2$s, %5$s and %6$s.  You always start at the top of a window, so %1$s moves to the next option and %2$s moves back one.  It is also possible to jump to sections with %3$s and %4$s.
 <silence msec="500" />Next, once you have reached the desired option, use %5$s, %6$s and %7$s to change it.  If its a number on a sliding scale, move the slider with %5$s and %6$s.  If its a checkbutton, toggle it with %7$s.  If its a more complex option with many actions, use %5$s and %6$s to cycle through the possibilities and %7$s to make the selection.
 <silence msec="500" />The next set of keybinds are hot keys such as %11$s and %10$s.  These hot keys change meaning depending which option you are at.  At any time, press %8$s to read out the list of available hot keys.  Of note, %10$s is the hot key to save settings and exit.

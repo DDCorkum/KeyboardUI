@@ -15,7 +15,7 @@ Refer to KeyboardUI.lua for full details
 
 local KeyboardUI = select(2, ...)
 
-local module = {name = "SpellBook", title = QUEST_LOG, frame = CreateFrame("Frame", nil, QuestMapFrame)}
+local module = {name = "QuestLog", title = QUEST_LOG, frame = CreateFrame("Frame", nil, QuestMapFrame)}
 
 KeyboardUI:RegisterModule(module)
 

@@ -24,8 +24,6 @@ local module =
 
 KeyboardUI:RegisterModule(module)
 
-StaticFoo = module
-
 local currentPopup, currentButton = 0, 0
 local hasBeenMultiplePopups
 
@@ -37,6 +35,51 @@ local buttons =
 	{StaticPopup3.button1, StaticPopup3.button2, StaticPopup3.button3, StaticPopup3.button4},
 }
 
+local function assertSecureKeybinds()
+	if module:hasFocus() and currentPopup > 0 and not InCombatLockdown() then
+		if buttons[currentPopup][1]:IsVisible() then
+			SetOverrideBindingClick(module.frame, true, module:getOption("bindingDoAction1Button"), buttons[currentPopup][1]:GetName(), "LeftButton")
+		end
+		if buttons[currentPopup][2]:IsVisible() then
+			SetOverrideBindingClick(module.frame, true, module:getOption("bindingDoAction2Button"), buttons[currentPopup][2]:GetName(), "LeftButton")
+		end
+		if buttons[currentPopup][3]:IsVisible() then
+			SetOverrideBindingClick(module.frame, true, module:getOption("bindingDoAction3Button"), buttons[currentPopup][3]:GetName(), "LeftButton")
+		end
+		if buttons[currentPopup][4]:IsVisible() then
+			SetOverrideBindingClick(module.frame, true, module:getOption("bindingDoAction4Button"), buttons[currentPopup][4]:GetName(), "LeftButton")
+		end
+		if currentButton > 0 then
+			SetOverrideBindingClick(module.frame, true, module:getOption("bindingDoActionButton"), buttons[currentPopup][currentButton]:GetName(), "LeftButton")
+		end
+	end
+end
+
+local function removeSecureKeybinds()
+	if not InCombatLockdown() then
+		ClearOverrideBindings(module.frame)
+	end
+end
+
+module.frame:RegisterEvent("PLAYER_REGEN_DISABLED")
+module.frame:RegisterEvent("PLAYER_REGEN_ENABLED")
+
+module.frame:SetScript("OnEvent", function(self, event)
+	if event == "PLAYER_REGEN_DISABLED" then
+		removeSecureKeybinds()
+	elseif event == "PLAYER_REGEN_ENABLED" then
+		assertSecureKeybinds()
+	end
+end)
+
+function module:GainFocus()
+	assertSecureKeybinds()
+end
+
+function module:LoseFocus()
+	removeSecureKeybinds()
+end
+
 local function isVisible(frame)
 	return frame:IsVisible()
 end
@@ -45,6 +88,8 @@ function module:NextEntry()
 	local newPopup = module:findNextInTable(popups, currentPopup, isVisible)
 	if newPopup and newPopup ~= currentPopup then
 		currentPopup, currentButton = newPopup, 0
+		removeSecureKeybinds()
+		assertSecureKeybinds()
 		return popups[currentPopup].text:GetText()	
 	elseif currentPopup > 0 then
 		return popups[currentPopup].text:GetText()
@@ -55,6 +100,8 @@ end
 function module:PrevEntry()
 	local newPopup = module:findPrevInTable(popups, currentPopup, isVisible)
 	if newPopup and newPopup ~= currentPopup then
+		removeSecureKeybinds()
+		assertSecureKeybinds()
 		currentPopup, currentButton = newPopup, 0
 		return popups[currentPopup].text:GetText()	
 	elseif currentPopup > 0 then
@@ -75,6 +122,8 @@ function module:Forward()
 	if currentPopup > 0 then
 		currentButton = module:findNextInTable(buttons[currentPopup], currentButton, isVisible) or 0
 		if currentButton > 0 then
+			removeSecureKeybinds()
+			assertSecureKeybinds()
 			return buttons[currentPopup][currentButton]:GetText()	
 		end
 	end
@@ -84,6 +133,8 @@ function module:Backward()
 	if currentPopup > 0 then
 		currentButton = module:findPrevInTable(buttons[currentPopup], currentButton, isVisible) or 0
 		if currentButton > 0 then
+			removeSecureKeybinds()
+			assertSecureKeybinds()
 			return buttons[currentPopup][currentButton]:GetText()	
 		end
 	end
@@ -108,6 +159,7 @@ function module:Actions()
 end
 
 function module:DoAction(index)
+	-- This can probably be replaced with nop() because of assertSecureKeybinds()
 	if currentPopup then
 		if index then
 			buttons[currentPopup][index]:Click()
@@ -119,20 +171,22 @@ end
 
 local function popupOnShow(frame)
 	currentPopup, currentButton = frame:GetID(), 0
-	C_Timer.After(0, function()
-		module:ttsInterrupt("Popup! " .. frame.text:GetText())
-	end)
+	assertSecureKeybinds()
+	module:ttsInterrupt("Popup! " .. frame.text:GetText())
 end
 
 local function popupOnHide(frame)
 	if currentPopup == frame:GetID() then
 		currentPopup = module:findNextInTable(popups, currentPopup, isVisible)
 		currentButton = 0
+		removeSecureKeybinds()
 		if currentPopup then
+			assertSecureKeybinds()
 			module.frame:SetParent(popups[currentPopup])
 			module:ttsInterrupt("Another popup! " .. popups[currentPopup].text:GetText())
 		else
 			currentPopup = 0
+			
 		end
 	end
 end

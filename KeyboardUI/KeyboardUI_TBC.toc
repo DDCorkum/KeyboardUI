@@ -3,8 +3,9 @@
 ## Notes: Keyboard user interface with text to speech
 ## Author: Dahk Celes (DDCorkum)
 ## X-License: GNU Lesser-GPL
-## Version: 0.3
+## Version: 0.4
 ## SavedVariables: KeyboardUIOptions
 
 KeyboardUI.lua
 KeyboardUI_StaticPopup.lua
+KeyboardUI_UIDropDownMenu.lua
