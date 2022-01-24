@@ -1,11 +1,15 @@
-## Interface: 20502
+## Interface: 20503
 ## Title: KeyboardUI
 ## Notes: Keyboard user interface with text to speech
 ## Author: Dahk Celes (DDCorkum)
 ## X-License: GNU Lesser-GPL
-## Version: 0.4
+## Version: 0.5
 ## SavedVariables: KeyboardUIOptions
 
+# Core addon and widgets
 KeyboardUI.lua
 KeyboardUI_StaticPopup.lua
 KeyboardUI_UIDropDownMenu.lua
+
+# Frames
+KeyboardUI_SpellBook.lua

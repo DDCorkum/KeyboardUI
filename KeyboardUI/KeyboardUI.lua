@@ -19,6 +19,11 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+0.5 (2022-01-23) by Dahk Celes
+- New module: spell book and action bars.
+- Attempts to use /tts preferred voice setting.
+- Better text recognition for special popups like logging out.
+
 0.4 (2022-01-15) by Dahk Celes
 - Secure keybinds outside combat.
 - New module: drop down menus.
@@ -57,11 +62,11 @@ KUI_HIGHLIGHT_COLOR = {1, 1, 0, 0.2}
 
 local TEXT_TO_SPEECH = TEXT_TO_SPEECH or "Text to speech"	-- Classic compatibility for 1.14.1 (not fixed) and 2.5.2 (fixed in 2.5.3)
 
+local KUI_VOICE					-- defined at PLAYER_LOGIN
+local KUI_VOICE_ENGLISH
+
 -------------------------
 -- Configuration
-
-local KUI_VOICE = 1 		-- Microsoft Zira (enUS)
-local KUI_VOICE_ALT = 0		-- Microsoft David (enUS)
 
 -- modules cannot change these settings with setOption()
 local globalDefaults =
@@ -72,6 +77,7 @@ local globalDefaults =
 	speed = 1,										-- Less than one slows, and greater than one accelerates text to speech
 		
 	-- key bindings that are kept the same for the entire addon
+	bindingChangeTabButton = "CTRL-TAB",
 	bindingNextGroupButton = "CTRL-SHIFT-DOWN",
 	bindingPrevGroupButton = "CTRL-SHIFT-UP",
 	bindingNextEntryButton = "CTRL-DOWN",
@@ -85,6 +91,13 @@ local globalDefaults =
 	bindingDoAction3Button = "ALT-3",
 	bindingDoAction4Button = "ALT-4", 
 	bindingDoAction5Button = "ALT-5",
+	bindingDoAction6Button = "ALT-6",
+	bindingDoAction7Button = "ALT-7",
+	bindingDoAction8Button = "ALT-8",
+	bindingDoAction9Button = "ALT-9",
+	bindingDoAction10Button = "ALT-0",
+	bindingDoAction11Button = "ALT--",
+	bindingDoAction12Button = "ALT-=",
 	bindingReadTitleButton = "CTRL-BACKSPACE",
 	bindingReadDescriptionButton = "CTRL-SPACE",
 }
@@ -130,15 +143,15 @@ KeyboardUI:RegisterModule(module, minorVersion)
 		-- The following wrapper functions apply user settings before calling C_VoiceChat.SpeakText()
 		-- If the user sets volume for a module to zero, then nothing is spoken.
 
-		-- module:ttsQueue(text [, rate, dynamics, useAltVoice])		-- Speaks using queued local playback.
-		-- module:ttsInterrupt(text [, rate, dynamics, useAltVoice])	-- Interrupts any ongoing or queued local playback with a new message.
+		-- module:ttsQueue(text [, rate, dynamics, useEnglish])			-- Speaks using queued local playback.
+		-- module:ttsInterrupt(text [, rate, dynamics, useEnglish])		-- Interrupts any ongoing or queued local playback with a new message.
 		-- module:ttsStop()												-- Stops any ongoing or queued local playback.
 
 		-- Arguments for ttsQueue() and ttsInterrupt()
 			-- text			string		Message for local playback.
 			-- rate			number		Defaults to 3.
 			-- dynamics		number		Defaults to KUI_MF.  Expected values are KUI_FF, KUI_F, KUI_MF, KUI_MP, KUI_P, or KUI_PP. 
-			-- useAltVoice	boolean		When true, uses an alternate voice.
+			-- useEnglish	boolean		When true, a language with "English" in the name will be preferred even if this differs from the user's choices.
 		
 		
 	-- Methods that each module should overwrite as required. (Hint: they start with upper case.)
@@ -163,6 +176,7 @@ KeyboardUI:RegisterModule(module, minorVersion)
 	
 		-- module:afterCombat(func, ...)								-- Call self:func(...) as soon as possible but outside combat lockdown
 		-- module:displayTooltip(text [, optLine1], ...)				-- NEEDS DOCUMENTATION		
+		-- module:getScanningTooltip([N])								-- Provides a scanning tooltip (based on SharedTooltipTemplate) that has already had ClearLines().  Pass N to ensure the tooltip has: .left1, .right1, .left2, .right2, ..., .leftN, .rightN.
 	
 	-- Methods that each module may overwrite if desired. (Hint: they start with upper case.)
 	
@@ -185,6 +199,7 @@ local shownModules = {}				-- the modules currently visible
 
 local function enableKeybindings()
 	if not InCombatLockdown() then
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingChangeTabButton, "KeyboardUIChangeTabButton", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextGroupButton, "KeyboardUINextGroupButton", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevGroupButton, "KeyboardUIPrevGroupButton", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextEntryButton, "KeyboardUINextEntryButton", "LeftButton")
@@ -198,6 +213,13 @@ local function enableKeybindings()
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction3Button, "KeyboardUIDoAction3Button", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction4Button, "KeyboardUIDoAction4Button", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction5Button, "KeyboardUIDoAction5Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction6Button, "KeyboardUIDoAction6Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction7Button, "KeyboardUIDoAction7Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction8Button, "KeyboardUIDoAction8Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction9Button, "KeyboardUIDoAction9Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction10Button, "KeyboardUIDoAction10Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction11Button, "KeyboardUIDoAction11Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction12Button, "KeyboardUIDoAction12Button", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadTitleButton, "KeyboardUIReadTitleButton", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadDescriptionButton, "KeyboardUIReadDescriptionButton", "LeftButton")
 	end
@@ -323,7 +345,28 @@ local function configureOptions(name)
 		setmetatable(defaultOptions[name], {__index = KeyboardUIOptions.global})
 	end
 end
-	
+
+local function configureVoices()
+	local opt1, opt2
+	if C_TTSSettings then
+		-- Classic compatibility with 1.14.1
+		opt1, opt2 = C_TTSSettings.GetVoiceOptionID(0), C_TTSSettings.GetVoiceOptionID(1)
+	end
+	local voices = C_VoiceChat.GetTtsVoices()
+	for __, voice in ipairs(voices) do
+		if voice.name:find("English") and (voice.voiceID == opt1 or voice.voiceID == opt2 or not KUI_VOICE_ENGLISH) then
+			KUI_VOICE_ENGLISH = voice.voiceID
+			if voice.voiceID == opt2 then
+				-- this is the preferred option
+				break;
+			end
+		end
+	end
+	KUI_VOICE = opt2 or opt1 or KUI_VOICE_ENGLISH or voices[1] and voice[1].voiceID or nil
+	KUI_VOICE_ENGLISH = KUI_VOICE_ENGLISH or KUI_VOICE
+
+end
+
 frame:RegisterEvent("ADDON_LOADED")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:RegisterEvent("PLAYER_REGEN_DISABLED")
@@ -352,11 +395,12 @@ frame:SetScript("OnEvent", function(__, event, arg1)
 		end
 	elseif event == "PLAYER_LOGIN" then
 		C_Timer.After(5, function()
+			configureVoices()
 			if KeyboardUIOptions.global.notFirstTime then
-				modules[1]:ttsQueue("For help with Keyboard UI, type: slash, K, U, I.", KUI_NORMAL, KUI_PP)
+				modules[1]:ttsQueue("For help with Keyboard UI, type: slash, K, U, I.", KUI_NORMAL, KUI_PP, true)
 			else
 				KeyboardUIOptions.global.notFirstTime = true
-				modules[1]:ttsInterrupt([=[<speak>Welcome to Keyboard UI. <silence msec="500"/> For help, type: slash Keyboard UI, all as one word.  Alternatively, type: slash, K, U, I.</speak>]=], KUI_CASUAL, KUI_P)
+				modules[1]:ttsInterrupt([=[<speak>Welcome to Keyboard UI. <silence msec="500"/> For help, type: slash Keyboard UI, all as one word.  Alternatively, type: slash, K, U, I.</speak>]=], KUI_CASUAL, KUI_P, true)
 			end
 		end)
 	elseif event == "PLAYER_REGEN_DISABLED" and #shownModules > 0 then
@@ -403,6 +447,11 @@ function lib:LoseFocus()
 	-- Fires when a module is no longer the target for keybindings.
 end
 
+function lib:ChangeTab(...)
+	-- Override to cycle entire tabs when a frame comprises distinct tabs, each with independent layouts that each contain one or more groups.  From the last tab, it should cycle to the beginning.
+	-- To ensure that 'tabbing' remains mentally distinct from navigating within the current frame, this is purposefully a very different keybind that does not default to the use of arrow keys.
+end
+
 function lib:NextGroup(...)
 	-- Override to navigate groups or pages, each with one or more entries, each with one or more actions.
 	return self:NextEntry(...)
@@ -410,7 +459,7 @@ end
 
 function lib:PrevGroup(...)
 	-- Override to navigate groups or pages, each with one or more entries, each with one or more actions.
-	return self:NextEntry(...)
+	return self:PrevEntry(...)
 end
 
 function lib:NextEntry(...)
@@ -507,16 +556,16 @@ ttsFrame:SetScript("OnUpdate", function()
 end)
 
 -- say something when previous messages have finished
-function lib:ttsQueue(text, rate, dynamics, useAltVoice)
+function lib:ttsQueue(text, rate, dynamics, useEnglish)
 	local volume = (dynamics or KUI_MF) * self:getOption("volume")
-	if volume > 0  and text and text ~= "" and self:getOption("enabled") then
+	if KUI_VOICE and volume > 0  and text and text ~= "" and self:getOption("enabled") then
 		if rate == nil or rate > 0 then
 			rate = floor((rate or KUI_NORMAL) * self:getOption("speed"))
 		end
 		if text:sub(1,1) == "<" and not text:sub(1,7) == "<speak>" then
 			text = text:gsub("[\<\>]", " -- ")
 		end
-		tinsert(ttsFrame, {useAltVoice and KUI_VOICE_ALT or KUI_VOICE, text, Enum.VoiceTtsDestination.QueuedLocalPlayback, rate, volume})
+		tinsert(ttsFrame, {useEnglish and KUI_VOICE_ENGLISH or KUI_VOICE, text, Enum.VoiceTtsDestination.QueuedLocalPlayback, rate, volume})
 		ttsFrame:Show()
 	end
 end
@@ -565,40 +614,43 @@ local function getCurrentModule()
 	return shownModules[#shownModules]
 end
 
-CreateFrame("Button", "KeyboardUINextGroupButton")
-KeyboardUINextGroupButton:SetScript("OnClick", function(__, button, down)
+CreateFrame("Button", "KeyboardUIChangeTabButton"):SetScript("OnClick", function(__, button, down)
+	local module = getCurrentModule()
+	if module then
+		module:ttsStop()
+		module:ttsQueue(module:ChangeTab(), KUI_QUICK, KUI_MF)
+	end
+end)
+
+CreateFrame("Button", "KeyboardUINextGroupButton"):SetScript("OnClick", function(__, button, down)
 	local module = getCurrentModule()
 	if module then
 		module:ttsInterrupt(module:NextGroup(), KUI_QUICK, KUI_MF)
 	end
 end)
 
-CreateFrame("Button", "KeyboardUIPrevGroupButton")
-KeyboardUIPrevGroupButton:SetScript("OnClick", function()
+CreateFrame("Button", "KeyboardUIPrevGroupButton"):SetScript("OnClick", function()
 	local module = getCurrentModule()
 	if module then
 		module:ttsInterrupt(module:PrevGroup(), KUI_QUICK, KUI_MF)
 	end
 end)
 
-CreateFrame("Button", "KeyboardUINextEntryButton")
-KeyboardUINextEntryButton:SetScript("OnClick", function()
+CreateFrame("Button", "KeyboardUINextEntryButton"):SetScript("OnClick", function()
 	local module = getCurrentModule()
 	if module then
 		module:ttsInterrupt(module:NextEntry(), KUI_QUICK, KUI_MF)
 	end
 end)
 
-CreateFrame("Button", "KeyboardUIPrevEntryButton")
-KeyboardUIPrevEntryButton:SetScript("OnClick", function()
+CreateFrame("Button", "KeyboardUIPrevEntryButton"):SetScript("OnClick", function()
 	local module = getCurrentModule()
 	if module then
 		module:ttsInterrupt(module:PrevEntry(), KUI_QUICK, KUI_MF)
 	end
 end)
 
-CreateFrame("Button", "KeyboardUIForwardButton")
-KeyboardUIForwardButton:SetScript("OnClick", function()
+CreateFrame("Button", "KeyboardUIForwardButton"):SetScript("OnClick", function()
 	local module = getCurrentModule()
 	if module and module:RefreshEntry() then
 		local intro, body, concl = module:Forward()
@@ -608,8 +660,7 @@ KeyboardUIForwardButton:SetScript("OnClick", function()
 	end
 end)
 
-CreateFrame("Button", "KeyboardUIBackwardButton")
-KeyboardUIBackwardButton:SetScript("OnClick", function()
+CreateFrame("Button", "KeyboardUIBackwardButton"):SetScript("OnClick", function()
 	local module = getCurrentModule()
 	if module and module:RefreshEntry() then
 		local intro, body, concl = module:Backward()
@@ -619,8 +670,7 @@ KeyboardUIBackwardButton:SetScript("OnClick", function()
 	end
 end)
 
-CreateFrame("Button", "KeyboardUIDoActionButton")
-KeyboardUIDoActionButton:SetScript("OnClick", function()
+CreateFrame("Button", "KeyboardUIDoActionButton"):SetScript("OnClick", function()
 	local module = getCurrentModule()
 	if module and module:RefreshEntry() then
 		module:ttsStop()
@@ -628,92 +678,41 @@ KeyboardUIDoActionButton:SetScript("OnClick", function()
 	end
 end)
 
-CreateFrame("Button", "KeyboardUIDoAction1Button")
-KeyboardUIDoAction1Button:SetScript("OnClick", function()
-	local module = getCurrentModule()
-	if module and module:RefreshEntry() then
-		module:ttsStop()
-		module:ttsQueue(module:DoAction(1), KUI_QUICK, KUI_MF)
-	end
-end)
-
-CreateFrame("Button", "KeyboardUIDoAction2Button")
-KeyboardUIDoAction2Button:SetScript("OnClick", function()
-	local module = getCurrentModule()
-	if module and module:RefreshEntry() then
-		module:ttsStop()
-		module:ttsQueue(module:DoAction(2), KUI_QUICK, KUI_MF)
-	end
-end)
-
-CreateFrame("Button", "KeyboardUIDoAction3Button")
-KeyboardUIDoAction3Button:SetScript("OnClick", function()
-	local module = getCurrentModule()
-	if module and module:RefreshEntry() then
-		module:ttsStop()
-		module:ttsQueue(module:DoAction(3), KUI_QUICK, KUI_MF)
-	end
-end)
-
-CreateFrame("Button", "KeyboardUIDoAction4Button")
-KeyboardUIDoAction4Button:SetScript("OnClick", function()
-	local module = getCurrentModule()
-	if module and module:RefreshEntry() then
-		module:ttsStop()
-		module:ttsQueue(module:DoAction(4), KUI_QUICK, KUI_MF)
-	end
-end)
-
-CreateFrame("Button", "KeyboardUIDoAction5Button")
-KeyboardUIDoAction5Button:SetScript("OnClick", function()
-	local module = getCurrentModule()
-	if module and module:RefreshEntry() then
-		module:ttsStop()
-		module:ttsQueue(module:DoAction(5), KUI_QUICK, KUI_MF)
-	end
-end)
-
-CreateFrame("Button", "KeyboardUIActionsButton")
-KeyboardUIActionsButton:SetScript("OnClick", function()
-	local module = getCurrentModule()
-	if module and module:RefreshEntry() then
-		module:ttsStop()
-		local title1, title2, title3, title4, title5 = module:Actions()
-		local key1, key2, key3, key4, key5 = 
-			KeyboardUIOptions.global.bindingDoAction1Button or "Alt-1",
-			KeyboardUIOptions.global.bindingDoAction2Button or "Alt-2",
-			KeyboardUIOptions.global.bindingDoAction3Button or "Alt-3",
-			KeyboardUIOptions.global.bindingDoAction4Button or "Alt-4",
-			KeyboardUIOptions.global.bindingDoAction5Button or "Alt-5"
-		local text = ""
-		if title1 and title1 ~= "" and key1 then
-			module:ttsQueue(key1 .. CHAT_HEADER_SUFFIX .. title1)
+for i=1, 12 do
+	local name = "KeyboardUIDoAction" .. i .. "Button"
+	CreateFrame("Button", name):SetScript("OnClick", function()
+		local module = getCurrentModule()
+		if module and module:RefreshEntry() then
+			module:ttsStop()
+			module:ttsQueue(module:DoAction(i), KUI_QUICK, KUI_MF)
 		end
-		if title2 and title2 ~= "" and key2 then
-			module:ttsQueue(key2 .. CHAT_HEADER_SUFFIX .. title2)
-		end
-		if title3 and title3 ~= "" and key3 then
-			module:ttsQueue(key3 .. CHAT_HEADER_SUFFIX .. title3)
-		end
-		if title4 and title4 ~= "" and key4 then
-			module:ttsQueue(key4 .. CHAT_HEADER_SUFFIX .. title4)
-		end
-		if title5 and title5 ~= "" and key5 then
-			module:ttsQueue(key5 .. CHAT_HEADER_SUFFIX .. title5)
+	end)
+end
+
+CreateFrame("Button", "KeyboardUIActionsButton"):SetScript("OnClick", function()
+	local module = getCurrentModule()
+	if module and module:RefreshEntry() then
+		module:ttsStop()
+		local actions = {module:Actions()}
+		for i=1, 12 do
+			if actions[i] and actions[i] ~= "" then
+				local keybind = module:getOption("bindingDoAction"..i)
+				if keybind then
+					module:ttsQueue(keybind .. CHAT_HEADER_SUFFIX .. actions[i])
+				end
+			end 
 		end
 	end
 end)
 
-CreateFrame("Button", "KeyboardUIReadTitleButton")
-KeyboardUIReadTitleButton:SetScript("OnClick", function()
+CreateFrame("Button", "KeyboardUIReadTitleButton"):SetScript("OnClick", function()
 	local module = getCurrentModule()
 	if module then
 		module:ttsInterrupt(module:RefreshEntry() or "", KUI_NORMAL, KUI_MF)
 	end
 end)
 
-CreateFrame("Button", "KeyboardUIReadDescriptionButton")
-KeyboardUIReadDescriptionButton:SetScript("OnClick", function()
+CreateFrame("Button", "KeyboardUIReadDescriptionButton"):SetScript("OnClick", function()
 	local module = getCurrentModule()
 	if module and module:RefreshEntry() then
 		local introduction, body, conclusion = module:GetEntryLongDescription()
@@ -727,7 +726,10 @@ KeyboardUIReadDescriptionButton:SetScript("OnClick", function()
 	end
 end)
 
+--[[
+	-- unused; should be merged into the options menu.
 _G["BINDING_HEADER_KeyboardUI"] = "Keyboard UI"
+_G["BINDING_NAME_CLICK KeyboardUIChangeTabButton:LeftButton"] = --
 _G["BINDING_NAME_CLICK KeyboardUINextGroupButton:LeftButton"] = BROWSER_FORWARD_TOOLTIP
 _G["BINDING_NAME_CLICK KeyboardUIPrevGroupButton:LeftButton"] = BROWSER_BACK_TOOLTIP
 _G["BINDING_NAME_CLICK KeyboardUINextEntryButton:LeftButton"] = NEXT .. " " .. ENCOUNTER_JOURNAL_ITEM
@@ -743,6 +745,7 @@ _G["BINDING_NAME_CLICK KeyboardUIDoAction5Button:LeftButton"] = CHOOSE .. " 5"
 _G["BINDING_NAME_CLICK KeyboardUIActionsButton:LeftButton"] = SAY .. " " .. OPTIONS
 _G["BINDING_NAME_CLICK KeyboardUIReadTitleButton:LeftButton"] = SAY .. " " .. NAME
 _G["BINDING_NAME_CLICK KeyboardUIReadDescriptionButton:LeftButton"] = SAY .. " " .. DESCRIPTION
+--]]
 
 
 -------------------------
@@ -796,6 +799,27 @@ function lib:findPrevInTable(tbl, index, criteria)
 		end
 	end
 end
+
+local scanningTooltip = CreateFrame("GameTooltip", "KeyboardUIScanningTooltip", nil, "SharedTooltipTemplate")
+scanningTooltip:SetOwner(frame, "ANCHOR_NONE")
+local scanningTooltipLines = 0
+
+function lib:getScanningTooltip(minLines)
+	scanningTooltip:ClearLines()
+	if minLines and minLines > scanningTooltipLines then
+		for i=1, scanningTooltipLines do
+			scanningTooltip:AddLine(" ")
+		end
+		for i=scanningTooltipLines+1, minLines do
+			scanningTooltip:AddLine(" ")
+			scanningTooltip["left"..i] = _G["KeyboardUIScanningTooltipTextLeft"..i]
+			scanningTooltip["right"..i] = _G["KeyboardUIScanningTooltipTextRight"..i]
+		end
+		scanningTooltip:ClearLines()
+	end
+	return scanningTooltip
+end
+
 
 -------------------------
 -- Options Menu
@@ -1266,11 +1290,12 @@ function SlashCmdList.KEYBOARDUI(msg)
 	
 	-- give the user a hint
 	modules[1]:ttsStop()
-	local hintText = [=[<speak>Keyboard UI Options.  Keyboard UI has various keybindings which activate only when Keyboard-enabled window appears outside of combat.
-<silence msec="500" />The first keybinds are for movement: %1$s, %2$s, %5$s and %6$s.  You always start at the top of a window, so %1$s moves to the next option and %2$s moves back one.  It is also possible to jump to sections with %3$s and %4$s.
-<silence msec="500" />Next, once you have reached the desired option, use %5$s, %6$s and %7$s to change it.  If its a number on a sliding scale, move the slider with %5$s and %6$s.  If its a checkbutton, toggle it with %7$s.  If its a more complex option with many actions, use %5$s and %6$s to cycle through the possibilities and %7$s to make the selection.
-<silence msec="500" />The next set of keybinds are hot keys such as %11$s and %10$s.  These hot keys change meaning depending which option you are at.  At any time, press %8$s to read out the list of available hot keys.  Of note, %10$s is the hot key to save settings and exit.
-<silence msec="500" />While you are at an option, another thing you may query it for more detail.  Press %9$s to request a full-length description. In fact, if you are unsure of what to do, both %9$s and %8$s are always safe choices because they simply read information without changing anything.</speak>]=]
+	local hintText = [=[<speak>Keyboard UI Options.  Keyboard UI has various keybindings which activate only outside combat, and only while a keyboard-enabled window appears.
+<silence msec="750" />The first set of keybinds are for moving around each window: %1$s, %2$s, %5$s and %6$s.  You always start at the top of a window, so %1$s moves to the next option and %2$s moves back one.  It is also possible to jump sections with %3$s and %4$s.
+<silence msec="750" />Next, once you have reached the desired option, use %5$s, %6$s and %7$s to change it.  Increment a slider with %5$s and decrement it with %6$s.  Toggle a checkbutton with %7$s.  If its a more complex choice, with many buttons to choose from, use %5$s and %6$s to cycle through the possibilities and %7$s to commit the action.
+<silence msec="750" />The next set of keybinds are hot keys such as %11$s and %10$s.  These hot keys change meaning depending which option you are at.  Press %8$s to read out the list of available hot keys.  Of note, %10$s is the hot key to save these Kebyoard UI settings and exit.  Without pressing %10$s, any changes you make will not save.
+<silence msec="750" />You may also query for more detail.  Press %9$s to read a full-length description. In fact, if you are unsure of what to do, both %9$s and %8$s are always safe choices because they simply read information without changing anything.
+<silence msec="750" />Finally, these keybinds are re-used throughout the user interface.  Each window is a little different, but its the same key strokes.  There is one other not yet listed: %12$s switches between tabs, on a window that has tabs.  Note that this does not apply to these Keyboard UI options.</speak>]=]
 	
 	modules[1]:ttsInterrupt(hintText:format(
 		KeyboardUIOptions.global.bindingNextEntryButton, -- 1
@@ -1283,8 +1308,9 @@ function SlashCmdList.KEYBOARDUI(msg)
 		KeyboardUIOptions.global.bindingActionsButton, -- 8
 		KeyboardUIOptions.global.bindingReadDescriptionButton, -- 9
 		KeyboardUIOptions.global.bindingDoAction5Button, -- 10
-		KeyboardUIOptions.global.bindingDoAction1Button -- 11
-	), KUI_NORMAL, KUI_MP)
+		KeyboardUIOptions.global.bindingDoAction1Button, -- 11
+		KeyboardUIOptions.global.bindingChangeTabButton -- 12
+	), KUI_NORMAL, KUI_MP, true)
 end
 SLASH_KEYBOARDUI1 = "/keyboardui"
 SLASH_KEYBOARDUI2 = "/kui"

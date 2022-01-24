@@ -172,7 +172,13 @@ end
 local function popupOnShow(frame)
 	currentPopup, currentButton = frame:GetID(), 0
 	assertSecureKeybinds()
-	module:ttsInterrupt("Popup! " .. frame.text:GetText())
+	if frame.text:GetText() == "" or frame.text:GetText() == " " then
+		C_Timer.After(0.1, function()
+			module:ttsInterrupt("Popup! " .. frame.text:GetText())
+		end)
+	else
+		module:ttsInterrupt("Popup! " .. frame.text:GetText())
+	end
 end
 
 local function popupOnHide(frame)
