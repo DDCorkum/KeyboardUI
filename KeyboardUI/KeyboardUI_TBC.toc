@@ -3,7 +3,7 @@
 ## Notes: Keyboard user interface with text to speech
 ## Author: Dahk Celes (DDCorkum)
 ## X-License: GNU Lesser-GPL
-## Version: 0.5
+## Version: 0.6
 ## SavedVariables: KeyboardUIOptions
 
 # Core addon and widgets

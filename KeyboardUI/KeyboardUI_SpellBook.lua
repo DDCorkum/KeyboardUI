@@ -24,7 +24,7 @@ local module =
 
 KeyboardUI:RegisterModule(module)
 
-local book, tab, slot, action = 0, 0, 0, 0
+local book, tab, slot, flyout, action = 0, 0, 0, 0, 0
 
 local function assertSecureKeybinds()
 	if book == 1 then
@@ -60,22 +60,34 @@ local function scanTooltip(id, bookType)
 	return ("%s, %s, %s, %s, %s. %s"):format(tooltip.left1:GetText() or "", tooltip.left2:GetText() or "", tooltip.right2:GetText() or "", tooltip.left3:GetText() or "", tooltip.right3:GetText() or "", tooltip.left4:GetText() or "")
 end
 
+local function scanTooltipByID(spellID)
+	local tooltip = module:getScanningTooltip(4)
+	tooltip:SetSpellByID(spellID)
+	return ("%s, %s, %s, %s, %s. %s"):format(tooltip.left1:GetText() or "", tooltip.left2:GetText() or "", tooltip.right2:GetText() or "", tooltip.left3:GetText() or "", tooltip.right3:GetText() or "", tooltip.left4:GetText() or "")
+end
+
 local function getEntryText(longDesc)
 	local slotWithOffset = book == 3 and slot or (slot + select(3, GetSpellTabInfo(tab)))
 	local bookType = book == 3 and BOOKTYPE_PET or BOOKTYPE_SPELL
 	local spellType, id = GetSpellBookItemInfo(slotWithOffset, bookType)
-	if spellType == "SPELL" then
-		return longDesc and scanTooltip(slotWithOffset, bookType) or GetSpellInfo(id)
-	elseif spellType == "FUTURESPELL" then
-		return longDesc and scanTooltip(slotWithOffset, bookType) or GetSpellInfo(id)
-	elseif spellType == "FLYOUT" then
-		return longDesc and scanTooltip(slotWithOffset, bookType) or "Collection of " .. GetFlyoutInfo(id) .. " abilities."
-	elseif spellType == "PETACTION" then
-		return longDesc and scanTooltip(slotWithOffset, bookType) or GetSpellInfo(petToSpellID(id))
+	if flyout == 0 then
+		if spellType == "SPELL" then
+			return longDesc and scanTooltip(slotWithOffset, bookType) or GetSpellInfo(id)
+		elseif spellType == "FUTURESPELL" then
+			return longDesc and scanTooltip(slotWithOffset, bookType) or GetSpellInfo(id)
+		elseif spellType == "FLYOUT" then
+			return longDesc and scanTooltip(slotWithOffset, bookType) or "Collection of " .. GetFlyoutInfo(id) .. " abilities."
+		elseif spellType == "PETACTION" then
+			return longDesc and scanTooltip(slotWithOffset, bookType) or GetSpellInfo(petToSpellID(id))
+		end
+	else
+		local spellID = GetFlyoutSlotInfo(id, flyout)
+		return longDesc and scanTooltipByID(spellID) or GetSpellInfo(spellID)
 	end
+
 end
 
-local function getActionText()
+local function getActionText(action)
 	local contains
 	local actionType, id, subType = GetActionInfo(action)
 		if actionType == "spell" then
@@ -169,7 +181,7 @@ local function getProfessionButton(offset)
 end
 
 local function showGlow()
-	local button = book == 2 and slot > 0 and getProfessionButton() or slot > 0 and _G["SpellButton"..getPosition()]
+	local button = flyout > 0 and _G["SpellFlyoutButton"..flyout] or book == 2 and slot > 0 and getProfessionButton() or slot > 0 and _G["SpellButton"..getPosition()]
 	if button then
 		if button.AbilityHighlight then
 			button.AbilityHighlight:Show()
@@ -185,7 +197,7 @@ local function showGlow()
 end
 
 local function hideGlow()
-	local button = book == 2 and slot > 0 and getProfessionButton() or slot > 0 and _G["SpellButton"..getPosition()]
+	local button = flyout > 0 and _G["SpellFlyoutButton"..flyout] or book == 2 and slot > 0 and getProfessionButton() or slot > 0 and _G["SpellButton"..getPosition()]
 	if button and button.AbilityHighlight then
 		button.AbilityHighlight:Hide()
 	end
@@ -195,6 +207,15 @@ local function hideAllGlows()
 	for i=1, SPELLS_PER_PAGE do
 		if _G["SpellButton"..i].AbilityHighlight then
 			_G["SpellButton"..i].AbilityHighlight:Hide()
+		end
+	end
+	if SpellFlyout:IsShown() then
+		local i = 1
+		while _G["SpellFlyoutButton"..i] do
+			if _G["SpellFlyoutButton"..i].AbilityHighlight then
+				_G["SpellFlyoutButton"..i].AbilityHighlight:Hide()
+			end
+			i = i + 1
 		end
 	end
 	for __, button in ipairs(professionButtons) do
@@ -219,7 +240,7 @@ function module:NextGroup()
 		end
 		if lowest then
 			hideGlow()
-			tab, slot = lowest, 1
+			tab, slot, flyout = lowest, 1, 0
 			showGlow()
 			return getEntryText()
 		end
@@ -237,7 +258,7 @@ function module:PrevGroup()
 		end
 		if lowest then
 			hideGlow()
-			tab, slot = lowest, 1
+			tab, slot, flyout = lowest, 1, 0
 			showGlow()
 			return getEntryText()
 		end
@@ -255,13 +276,41 @@ function module:NextEntry()
 			return module:NextGroup()
 		end	
 	else
-		if book == 1 and slot < select(4, GetSpellTabInfo(tab)) or book == 3 and slot < HasPetSpells() then
+		local offset, numSpells, bookType
+		if book == 1 then
+			bookType = BOOKTYPE_SPELL
+			__, __, offset, numSpells = GetSpellTabInfo(tab)
+		else
+			bookType = BOOKTYPE_PET
+			offset, numSpells = 0, HasPetSpells()
+		end
+		local slotType, id = GetSpellBookItemInfo(slot + offset, bookType)
+		if slotType == "FLYOUT" then
+			if not SpellFlyout:IsVisible() then
+				_G["SpellButton"..getPosition()]:Click()
+			end
+			local __, __, flyoutNumSlots = GetFlyoutInfo(id)
+			while flyout < flyoutNumSlots do
+				hideGlow()
+				flyout = flyout + 1
+				local __, __, isKnown = GetFlyoutSlotInfo(id, flyout)
+				if isKnown then
+					showGlow()
+					return getEntryText()
+				end
+			end
+		end
+		if slot < numSpells then
 			hideGlow()
-			slot = slot + 1
+			slot, flyout = slot + 1, 0
 			if slot > SpellBook_GetCurrentPage() * SPELLS_PER_PAGE then
 				ignorePageButtons = true
 				SpellBookNextPageButton:Click()
 				ignorePageButtons = false
+			end
+			local slotType, id = GetSpellBookItemInfo(slot + select(3, GetSpellTabInfo(tab)), book == 3 and BOOKTYPE_PET or BOOKTYPE_SPELL)
+			if slotType == "FLYOUT" then
+				_G["SpellButton"..getPosition()]:Click()
 			end
 			showGlow()
 			return getEntryText()
@@ -280,13 +329,36 @@ function module:PrevEntry()
 			return module:PrevGroup()
 		end	
 	else
-		if slot > 1 then
+		if flyout > 0 then
+			hideGlow()
+			flyout = flyout - 1
+			showGlow()
+			return getEntryText()
+		elseif slot > 1 then
 			hideGlow()
 			slot = slot - 1
 			if slot <= (SpellBook_GetCurrentPage() - 1) * SPELLS_PER_PAGE then
 				ignorePageButtons = true
 				SpellBookPrevPageButton:Click()
 				ignorePageButtons = false
+			end
+			local slotType, id = GetSpellBookItemInfo(slot + select(3, GetSpellTabInfo(tab)), book == 3 and BOOKTYPE_PET or BOOKTYPE_SPELL)
+			if slotType == "FLYOUT" then
+				local __, __, flyoutNumSlots = GetFlyoutInfo(id)
+				if not SpellFlyout:IsShown() then
+					_G["SpellButton"..getPosition()]:Click()
+				end
+				flyout = flyoutNumSlots
+				while flyout > 0 do
+					__, __,  isKnown = GetFlyoutSlotInfo(id, flyout)
+					if isKnown then
+						break;
+					else
+						flyout = flyout - 1
+					end
+				end
+			else
+				flyout = 0
 			end
 			showGlow()
 			return getEntryText()
@@ -295,12 +367,14 @@ function module:PrevEntry()
 end
 
 function module:RefreshEntry()
-	if book == 2 then
-		-- NYI
-	elseif book == 1 then
-		slot = min(slot, (select(4, GetSpellTabInfo(tab))))
-	elseif book == 3 then
+	local oldSlot = slot
+	if book == 3 then
 		slot = min(slot, (HasPetSpells()))
+	else
+		slot = min(slot, (select(4, GetSpellTabInfo(tab))))
+	end
+	if oldSlot ~= slot then
+		flyout = 0
 	end
 	return slot > 0 and getEntryText() or ""
 end
@@ -320,32 +394,96 @@ function module:Forward()
 	elseif action < 120 then
 		action = action + 1
 	end
-	return (HasAction(action) and (REPLACE .. " ") or "") .. getActionText()
+	return (HasAction(action) and (REPLACE .. " ") or "") .. getActionText(action)
 end
 
 function module:Backward()
 	if action > 1 then
 		action = action - 1
-		return (slot > 1 and HasAction(action) and (REPLACE .. " ") or "") .. getActionText()
+		return (slot > 1 and HasAction(action) and (REPLACE .. " ") or "") .. getActionText(action)
 	end
 end
 
 function module:Actions()
-	-- nop()
+	local prevBar
+	if action == 0 then
+		local bonus = GetBonusBarOffset()
+		if bonus > 0 then
+			prevBar = bonus + 5
+		else
+			prevBar = GetActionBarPage() - 1
+		end		
+	else
+		prevBar = floor((action-1)/12)
+	end
+	if slot > 0 then
+		return
+			REPLACE .. " " .. getActionText(prevBar*12 + 1),
+			REPLACE .. " " .. getActionText(prevBar*12 + 2),
+			REPLACE .. " " .. getActionText(prevBar*12 + 3),
+			"etcetera", -- 4
+			nil, --  5
+			nil, --  6
+			nil, --  7
+			nil, --  8
+			nil, --  9
+			nil, -- 10
+			nil, -- 11
+			REPLACE .. " " .. getActionText(prevBar*12 + 12)
+	else
+		return
+			getActionText(prevBar*12 + 1),
+			getActionText(prevBar*12 + 1),
+			getActionText(prevBar*12 + 1),
+			"etcetera", -- 4
+			nil, --  5
+			nil, --  6
+			nil, --  7
+			nil, --  8
+			nil, --  9
+			nil, -- 10
+			nil, -- 11
+			getActionText(prevBar*12 + 12)
+	end
 end
 
 function module:DoAction(index)
 	if index then
-		-- nop()
+		local prevBar
+		if action == 0 then
+			local bonus = GetBonusBarOffset()
+			if bonus > 0 then
+				prevBar = bonus + 5
+			else
+				prevBar = GetActionBarPage() - 1
+			end		
+		else
+			prevBar = floor((action-1)/12)
+		end
+		action = prevBar*12 + index
+		return module:DoAction()
 	elseif slot > 0 and action > 0 then
-		PickupSpellBookItem(book == 3 and slot or slot + select(3, GetSpellTabInfo(tab)), book == 3 and BOOKTYPE_PET or BOOKTYPE_SPELL)
+		if flyout > 0 then
+			local foo, flyoutID = GetSpellBookItemInfo(
+				book == 3 and slot or slot + select(3, GetSpellTabInfo(tab)),
+				book == 3 and BOOKTYPE_PET or BOOKTYPE_SPELL
+			)
+			spellID = GetFlyoutSlotInfo(flyoutID, flyout)
+			PickupSpell(spellID)
+		else
+			PickupSpellBookItem(book == 3 and slot or slot + select(3, GetSpellTabInfo(tab)), book == 3 and BOOKTYPE_PET or BOOKTYPE_SPELL)
+		end
 		local info = GetCursorInfo()
 		if info == "spell" or info == "petaction" then
 			PlaceAction(action)
 			ClearCursor()
-			return getActionText()
+			return getActionText(action)
+		elseif info == "flyout" then
+			PlaceAction(action)
+			ClearCursor()
+			return getActionText(action) .. "; however, to place only a single ability, press " .. module:getOption("bindingNextEntryButton") .. " to navigate the collection."
 		else
-			return "Unable to place " .. getEntryText() .. " onto " .. getActionText()
+			return "Unable to place " .. getEntryText() .. " onto " .. getActionText(action)
 		end
 	end
 end
@@ -366,12 +504,12 @@ end
 SpellBookSpellIconsFrame:Hide()
 SpellBookSpellIconsFrame:HookScript("OnShow", function(self)
 	if SpellBookFrame.bookType == BOOKTYPE_SPELL then
-		book, tab, slot =  1, SpellBookFrame.selectedSkillLine, 0
+		book, tab, slot, flyout =  1, SpellBookFrame.selectedSkillLine, 0, 0
 		removeSecureKeybinds()
 		assertSecureKeybinds()
 		announce(self, SPELLBOOK)
 	else -- BOOKTYPE_PET
-		book, tab, slot = 3, 0, 0
+		book, tab, slot, flyout = 3, 0, 0, 0
 		removeSecureKeybinds()
 		assertSecureKeybinds()
 		announce(self, PET)
@@ -386,7 +524,7 @@ if SpellBookProfessionFrame then
 	SpellBookProfessionFrame:Hide()
 	
 	SpellBookProfessionFrame:HookScript("OnShow", function(self)
-		book, tab, slot = 2, 0, 0
+		book, tab, slot, flyout = 2, 0, 0, 0
 		removeSecureKeybinds()
 		assertSecureKeybinds()
 		announce(self, TRADE_SKILLS)
@@ -394,13 +532,13 @@ if SpellBookProfessionFrame then
 end
 
 SpellBookFrame:HookScript("OnHide", function()
-	book, tab, slot = 0, 0, 0
+	book, tab, slot, flyout = 0, 0, 0, 0
 end)
 
 SpellBookNextPageButton:HookScript("OnClick", function()
 	if not ignorePageButtons then
 		hideGlow()
-		slot = (slot + SPELLS_PER_PAGE) - (slot % SPELLS_PER_PAGE) + 1
+		slot, flyout = (slot + SPELLS_PER_PAGE) - (slot % SPELLS_PER_PAGE) + 1, 0
 		position = 1
 		showGlow()
 	end
@@ -409,7 +547,7 @@ end)
 SpellBookPrevPageButton:HookScript("OnClick", function()
 	if not ignorePageButtons then
 		hideGlow()
-		slot = slot - (slot % SPELLS_PER_PAGE)
+		slot, flyout = slot - (slot % SPELLS_PER_PAGE), flyout
 		position = SPELLS_PER_PAGE
 		showGlow()
 	end
@@ -417,54 +555,54 @@ end)
 
 if SpellBookFrame_OpenToSpell then
 	hooksecurefunc("SpellBookFrame_OpenToSpell", function(spellID)
-		if book == 1 then
-			local flyout = FindFlyoutSlotBySpellID(spellID)
-			hideGlow()
-			tab, slot = SpellBookFrame.selectedSkillLine, (SpellBook_GetCurrentPage() - 1) * SPELLS_PER_PAGE
+		hideGlow()
+		if book == 2 then
+			tab, slot, flyout = SpellBookFrame.selectedSkillLine, 1, 0
+			if select(2, GetSpellBookItemInfo(slot + select(3,GetSpellTabInfo(tab)), BOOKTYPE_SPELL)) ~= spellID then
+				slot = 2 -- a bit of an assumption here, needs testing
+			end
+		else
+			if book == 1 then
+				tab, slot, flyout = SpellBookFrame.selectedSkillLine, (SpellBook_GetCurrentPage() - 1) * SPELLS_PER_PAGE, 0
+			else
+				tab, slot, flyout = 0, (SpellBook_GetCurrentPage() - 1) * SPELLS_PER_PAGE, 0
+			end
 			local __, __, offset, numEntries = GetSpellTabInfo(tab)
 			while slot + offset < numEntries do
 				slot = slot + 1
-				local spellType, id = GetSpellBookItemInfo(slot + offset, BOOKTYPE_SPELL)			
-				if flyout and id == flyout or id == spellID then
+				local actionType, actionID = GetSpellBookItemInfo(slot + offset, BOOKTYPE_SPELL)
+				if actionType == "FLYOUT" then
+					local __, __, flyoutNumSlots = GetFlyoutInfo(actionID)
+					if not SpellFlyout:IsShown() then
+						_G["SpellButton"..getPosition()]:Click()
+					end
+					flyout = 1
+					for i=1, flyoutNumSlots do
+						if spellID == GetFlyoutSlotInfo(actionID, i) then
+							flyout = i
+							break
+						end
+					end
+					break;
+				elseif id == spellID then
 					break;
 				end
 			end
-			showGlow()
-		elseif book == 3 then
-			local flyout = FindFlyoutSlotBySpellID(spellID)
-			hideGlow()
-			slot = (SpellBook_GetCurrentPage() - 1) * SPELLS_PER_PAGE
-			while slot < HasPetSpells() do
-				slot = slot + 1
-				local spellType, id = GetSpellBookItemInfo(slot + offset, BOOKTYPE_PET)			
-				if flyout and id == flyout or id == spellID then
-					break;
-				end
-			end
-			showGlow()	
 		end
+		showGlow()
+		module:ttsQueue("Currently at " .. getEntryText())
 	end)
 end
-
-hooksecurefunc("ChangeActionBarPage", function(page)
-	if book > 0 and slot > 0 then
-		local page, bonus = GetActionBarPage(), GetBonusBarOffset()
-		local firstAction = (bonus and (bonus+5) or (page-1))*12 + 1
-		if action >= firstAction and action <= firstAction + 12 then
-			action = firstAction
-		end
-	end
-end)
 
 hooksecurefunc("ToggleSpellBook", function(bookType)
 	if bookType == BOOKTYPE_SPELL and book ~= 1 then
 		hideGlow()
-		book, tab, slot = 1, SpellBookFrame.selectedSkillLine, 0		
+		book, tab, slot, flyout = 1, SpellBookFrame.selectedSkillLine, 0, 0
 		removeSecureKeybinds()
 		assertSecureKeybinds()
 	elseif bookType == BOOKTYPE_PET and book ~= 3 and HasPetSpells() then
 		hideGlow()
-		book, tab, slot = 3, 0, 0		
+		book, tab, slot, flyout = 3, 0, 0, 0
 		removeSecureKeybinds()
 		assertSecureKeybinds()	
 	end
@@ -473,18 +611,18 @@ end)
 
 hooksecurefunc ("SpellBookFrame_Update", function()
 	if book == 1 and tab ~= SpellBookFrame.selectedSkillLine then
-		tab, slot = SpellBookFrame.selectedSkillLine, 0
+		tab, slot, flyout = SpellBookFrame.selectedSkillLine, 0, 0
 		removeSecureKeybinds()
 		assertSecureKeybinds()
+		module:ttsYield(GetSpellTabInfo(tab) or "General")
 	end
 end)
 
-hooksecurefunc("ActionBarController_UpdateAll", function()
-	if book > 0 and slot > 0 then
-		local page, bonus = GetActionBarPage(), GetBonusBarOffset()
-		local firstAction = (bonus and (bonus+5) or (page-1))*12 + 1
-		if action >= firstAction and action <= firstAction + 12 then
-			action = firstAction
+MainMenuBarArtFrame:HookScript("OnAttributeChanged", function(__, key, value)
+	if key == "actionpage" and action > 0 then
+		if action <= (value-1)*12 or action > value*12 then
+			action = (value-1)*12 + 1
+			module:ttsYield(getActionText(action))
 		end
 	end
 end)

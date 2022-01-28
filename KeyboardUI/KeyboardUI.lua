@@ -19,23 +19,28 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+0.6 (2022-01-27) by Dahk Celes
+- Spell book and action bar improvements
+- Soft-spoken TTS when hovering over UI elements
+
 0.5 (2022-01-23) by Dahk Celes
-- New module: spell book and action bars.
-- Attempts to use /tts preferred voice setting.
-- Better text recognition for special popups like logging out.
+- New module: spell book and action bars
+- Attempts to use /tts preferred voice setting
+- Better text recognition for special popups like logging out
 
 0.4 (2022-01-15) by Dahk Celes
 - Secure keybinds outside combat.
-- New module: drop down menus.
+- New module: drop down menus
 
 0.3 (2022-01-13) by Dahk Celes
-- Small tweaks and bug fixes.  First version to be publicly visible.
+- Small tweaks and bug fixes
+- First version to be publicly visible
 
 0.2 (2022-01-12) by Dahk Celes
-- Rewrote the core addon using lessons learned from the proof of concept.
+- Rewrote the core addon using lessons learned from the proof of concept
 
 0.1 (2022-01-03) by Dahk Celes
-- Initial alpha version / proof of concept.
+- Initial alpha version / proof of concept
 
 --]]
 
@@ -156,6 +161,8 @@ KeyboardUI:RegisterModule(module, minorVersion)
 		
 	-- Methods that each module should overwrite as required. (Hint: they start with upper case.)
 		
+		-- intro [, body, concl] = module:ChangeTab()					-- Cycle tabs (forward, and then wrap around) when the window is made up of multiple tabs.
+
 		-- intro [, body, concl] = module:NextGroup()					-- Go to the first entry in the next/prev group containing entries.  Defaults to Next/PrevEntry(), so override only if there is more than one group.  Return false to indicate failure.
 		-- intro [, body, concl] = module:PrevGroup()					-- Examples: paging in the merchant frame; collapsible headers in the quest log; and sections of settings in the interface options.
 		
@@ -168,7 +175,7 @@ KeyboardUI:RegisterModule(module, minorVersion)
 		-- intro [, body, concl] = module:Forward()						-- Cycle between available actions, or does an action going "forward" if the only choices are forward/backward.  Defaults to DoAction(), so override only if there is more than one action.   Return nil to indicate failure.
 		-- intro [, body, concl] = module:Backward()					-- Examples: choosing between tracking, sharing or abandoning a quest; choosing between different buttons in the StaticPopup; or immediately moving a slider forward and back.
 		
-		-- title1, ..., title5 = module:Actions()						-- REQUIRED.  Provide a list of up to five available actions.  If none are possible, return an empty string.
+		-- title1, ..., title12 = module:Actions()						-- REQUIRED.  Provide a list of up to 12 available hot key actions  If none are possible, return an empty string.
 		-- [result] = module:DoAction([index])							-- REQUIRED.  Do the action selected with Next/PrevAction(), or the indexth action returned by Actions().
 
 		
@@ -542,6 +549,7 @@ ttsFrame:SetScript("OnEvent", function(__, event)
 	if event == "VOICE_CHAT_TTS_PLAYBACK_STARTED" then
 		ttsFrame:Hide()
 	elseif event == "VOICE_CHAT_TTS_PLAYBACK_FINISHED" then
+		ttsFrame.current = nil
 		ttsFrame:Show()
 	end
 end)
@@ -550,6 +558,7 @@ ttsFrame:SetScript("OnUpdate", function()
 	if #ttsFrame > 0 then
 		local tbl = tremove(ttsFrame,1)
 		C_VoiceChat.SpeakText(unpack(tbl))
+		ttsFrame.current = tbl[2]
 	else
 		ttsFrame:Hide()
 	end
@@ -571,8 +580,15 @@ function lib:ttsQueue(text, rate, dynamics, useEnglish)
 end
 
 function lib:ttsYield(...)
-	if not ttsFrame:IsShown() then
+	if #ttsFrame == 0 and not ttsFrame:IsShown() then
 		self:ttsQueue(...)
+		return true
+	end
+end
+
+function lib:ttsStopMessage(text)
+	if ttsFrame.current == text then
+		C_VoiceChat.StopSpeakingText()
 	end
 end
 
@@ -696,7 +712,7 @@ CreateFrame("Button", "KeyboardUIActionsButton"):SetScript("OnClick", function()
 		local actions = {module:Actions()}
 		for i=1, 12 do
 			if actions[i] and actions[i] ~= "" then
-				local keybind = module:getOption("bindingDoAction"..i)
+				local keybind = module:getOption("bindingDoAction"..i.."Button")
 				if keybind then
 					module:ttsQueue(keybind .. CHAT_HEADER_SUFFIX .. actions[i])
 				end
@@ -819,6 +835,55 @@ function lib:getScanningTooltip(minLines)
 	end
 	return scanningTooltip
 end
+
+-------------------------
+-- Global mouse integration
+
+local function getTextFromAnyWidget(obj, line)
+	if GameTooltip:IsShown() and GameTooltip:GetOwner() == obj then
+		local left, right = _G["GameTooltipTextLeft"..line], _G["GameTooltipTextRight"..line]
+		if left and right then
+			local left, right = left:GetText(), right:GetText()
+			if right and right ~= "" then
+				return left and left.."; "..right or right
+			else
+				return left
+			end
+		end
+	elseif line == 1 then
+		if type(obj.text) == "table" and type(obj.text.GetText) == "function" then
+			return obj.text:GetText()
+		elseif type(obj.Text) == "table" and type(obj.Text.GetText) == "function" then
+			return obj.Text:GetText()
+		end
+	end
+end
+
+local prevMouseFocus
+local focusTicks
+local mouseTicker = C_Timer.NewTicker(0.05, function()
+	local mouseFocus = GetMouseFocus()
+	if mouseFocus and mouseFocus ~= WorldFrame and getTextFromAnyWidget(mouseFocus, 1) then
+		if mouseFocus ~= prevMouseFocus then
+			focusTicks = -10
+			PlaySound(823)
+			prevMouseFocus = mouseFocus
+		elseif focusTicks < 0 or focusTicks%5 ~= 0 then
+			focusTicks = focusTicks + 1
+		else
+			mouseFocus.kuiMouseOverText = getTextFromAnyWidget(mouseFocus, focusTicks/5 + 1)
+			if mouseFocus.kuiMouseOverText and modules[1]:ttsYield(mouseFocus.kuiMouseOverText, KUI_RAPID, KUI_PP) then	
+				focusTicks = focusTicks + 1
+				if not mouseFocus.kuiMouseHooked then
+					mouseFocus.kuiMouseHooked = true
+					mouseFocus:HookScript("OnLeave", function()
+						modules[1]:ttsStopMessage(mouseFocus.kuiMouseOverText)
+					end)
+				end
+			end
+		end
+	end
+end)
 
 
 -------------------------
