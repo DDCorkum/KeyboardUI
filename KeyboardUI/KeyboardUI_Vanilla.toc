@@ -1,9 +1,9 @@
 ## Interface: 11401
 ## Title: KeyboardUI
 ## Notes: Keyboard user interface with text to speech
-## Author: Dahk Celes (DDCorkum)
-## X-License: GNU Lesser-GPL
-## Version: 0.6
+## Author: Dahk Celes (DDCorkum), in partnership with RogueEugor (A. Agostino)
+## X-License: All Rights Reserved
+## Version: 0.7
 ## SavedVariables: KeyboardUIOptions
 
 # Core addon and widgets
@@ -12,4 +12,5 @@ KeyboardUI_StaticPopup.lua
 KeyboardUI_UIDropDownMenu.lua
 
 # Frames
+KeyboardUI_GameMenu.lua
 KeyboardUI_SpellBook.lua

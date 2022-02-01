@@ -2,14 +2,14 @@
 
 ## Title: KeyboardUI
 ## Notes: Keyboard user interface with text to speech
-## Author: Dahk Celes (DDCorkum)
+## Author: Dahk Celes (DDCorkum), in partnership with RogueEugor (A. Agostino)
 ## X-License: All Rights Reserved
 
 This addon is made in partnership with WoWAccess by RogueEugor (A. Agostino).  The two addons may function alongside each other.
-Please note that WoWAccess is copyleft via GPL, while KeyboardUI remains all rights reserved
+Please note that WoWAccess and KeyboardUI have different licenses.
 
 Permission is granted to redistribute without modification outside the traditional WoW ecosystem in locations aimed principally at persons with blindness or low vision.
-This includes redistributing inside a zip folder containing multiple addons for assisted play, such as but not limited to WoWAccess.
+This redistribution may include packaging (eg, zip file) with other addons (eg, WoWAccess) and technologoes (eg, golden cursor files) for persons with blindness or low vision.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
 EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -18,6 +18,11 @@ IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
 OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
+
+0.7 (2022-02-01) by Dahk Celes
+- More TTS when hovering over the game world and UI
+- More control over TTS volume and rate
+- Keyboard navigation of the game menu
 
 0.6 (2022-01-27) by Dahk Celes
 - Spell book and action bar improvements
@@ -51,17 +56,20 @@ local KeyboardUI = select(2, ...)
 -------------------------
 -- Constants
 
-KUI_FF = 1.00
-KUI_F  = 0.95
-KUI_MF = 0.90 -- default
-KUI_MP = 0.85
-KUI_P  = 0.75 -- messages that repeat every few seconds
-KUI_PP = 0.50
+-- Multiplied with volumeVariance
+KUI_FF =  0.00
+KUI_F  = -0.10
+KUI_MF = -0.20 -- default
+KUI_MP = -0.30
+KUI_P  = -0.50
+KUI_PP = -1.00
 
-KUI_CASUAL 	= 1
-KUI_NORMAL 	= 2	-- default
-KUI_QUICK 	= 4
-KUI_RAPID 	= 5
+-- Multiplied with speedVariance
+KUI_SLOW	= -1.00
+KUI_CASUAL 	= -0.75
+KUI_NORMAL 	= -0.50	-- default
+KUI_QUICK 	= -0.25
+KUI_RAPID 	=  0.00
 
 KUI_HIGHLIGHT_COLOR = {1, 1, 0, 0.2}
 
@@ -76,12 +84,26 @@ local KUI_VOICE_ENGLISH
 -- modules cannot change these settings with setOption()
 local globalDefaults =
 {
-	-- options duplicated for each module
-	enabled = true,									-- Disables a module entirely when false
-	volume = 100,									-- Disables text to speech when set to zero
-	speed = 1,										-- Less than one slows, and greater than one accelerates text to speech
-		
-	-- key bindings that are kept the same for the entire addon
+	-- Text to speech
+	volumeMax = 100,							-- Volume of a KUI_FF message, out of 100
+	volumeVariance = 50,						-- How much quieter is a KUI_PP message relative to KUI_FF, out of 100
+	speedMax = 5,								-- Rate of a KUI_RAPID message, between 0 and 10
+	speedVariance = 2,							-- How much slower is a KUI_SLOW message, between 0 and 4
+	
+	-- Text to speech when mousing over elements
+	onEnter = true,
+	onEnterSayNPC = true,
+	onEnterSayGroup = true,
+	onEnterSayObject = true,
+	onEnterSayUI = true,
+	onEnterSayFullTooltip = true,
+	onEnterPing = true,
+	onEnterRequireMouseMovement = true,
+	
+	-- Default state for all modules
+	enabled = true,								-- Disables a module entirely when false
+	
+	-- Keybindings
 	bindingChangeTabButton = "CTRL-TAB",
 	bindingNextGroupButton = "CTRL-SHIFT-DOWN",
 	bindingPrevGroupButton = "CTRL-SHIFT-UP",
@@ -194,15 +216,28 @@ local L = module.text	-- Optional localization.  A metatable is added during reg
 --]]
 
 
+-------------------------
+-- Private properties
+
+-- Lists of all the modules
+local modules = {}					-- Modules in the order they were loaded (unless overridden by optIndex)
+local modulesByName = {}			-- Modules in no particular order, to simplify getting them by name
+local shownModules = {}				-- Modules currently visible
+
+-- Options used by the modules, including the global one
 KeyboardUIOptions = {}				-- SavedVariable
-local defaultOptions = {}			-- non-persistent
-local tempOptions = {}				-- while the interface options are open
-local optionCallbacks = {}			-- called when an option changes in the interface options
-local lib = {}						-- functions inheritable by all modules
-local frame = CreateFrame("Frame")	-- general event handler and override keybind owner
-local modules = {}					-- modules in the order they were loaded (unless overridden by optIndex)
-local modulesByName = {}			-- modules in no particular order, to simplify getting them by name
-local shownModules = {}				-- the modules currently visible
+local defaultOptions = {}			-- Non-persistent
+local tempOptions = {}				-- While the interface options are open
+local optionCallbacks = {}			-- Called when an option changes in the interface options
+
+-- Core addon
+local lib = {name = "global"}		-- Functions inheritable by all modules
+local frame = CreateFrame("Frame")	-- General event handler and override keybind owner
+local events = {}					-- The event handlers for frame, sorted by event
+
+
+-------------------------
+-- Keybindings
 
 local function enableKeybindings()
 	if not InCombatLockdown() then
@@ -229,6 +264,12 @@ local function enableKeybindings()
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction12Button, "KeyboardUIDoAction12Button", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadTitleButton, "KeyboardUIReadTitleButton", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadDescriptionButton, "KeyboardUIReadDescriptionButton", "LeftButton")
+	end
+end
+
+local function enableWorldFrameKeybindings()
+	if not InCombatLockdown() then
+		-- NYI
 	end
 end
 
@@ -294,7 +335,7 @@ local function updatePriorityWhileVisible(frame)
 end
 
 function KeyboardUI:RegisterModule(module, optIndex)
-	assert(type(module.name) == "string" and module.frame:IsObjectType("Frame"), "Invalid module registration")
+	assert(type(module.name) == "string" and module.frame:IsObjectType("Frame") and not modules[module.name], "Invalid module registration")
 	if optIndex then
 		tinsert(modules, optIndex, module)
 		module.id = optIndex
@@ -319,6 +360,29 @@ function lib:hasFocus()
 	return shownModules[#shownModules] == self
 end
 
+-------------------------
+-- General event handling
+
+function lib:onEvent(event, func)
+	if events[event] then
+		events[event][func] = true
+	else
+		frame:RegisterEvent(event)
+		events[event] = {}
+		events[event][func] = true
+	end
+end
+
+frame:SetScript("OnEvent", function(__, event, ...)
+	if events[event] then
+		for func in pairs(events[event]) do
+			func(...)
+		end
+	end
+end)
+
+-------------------------
+-- Options, including saved variables
 
 function lib:onOptionChanged(option, func, optArg)
 	optionCallbacks[self.name] = optionCallbacks[self.name] or {}
@@ -344,10 +408,12 @@ local function configureOptions(name)
 	tempOptions[name] = tempOptions[name] or {}
 	if name == "global" then
 		-- the global options default to configuration settings at the top of this file
-		setmetatable(KeyboardUIOptions[name], {__index = globalDefaults})
-		setmetatable(defaultOptions[name], {__index = globalDefaults})
+		setmetatable(tempOptions.global, {__index = KeyboardUIOptions.global})
+		setmetatable(KeyboardUIOptions.global, {__index = globalDefaults})
+		setmetatable(defaultOptions.global, {__index = globalDefaults})
 	else
 		-- the options for each module have a longer default values chain that ultimately terminates with the same global configuration settings
+		setmetatable(tempOptions[name], {__index = KeyboardUIOptions[name]})
 		setmetatable(KeyboardUIOptions[name], {__index = defaultOptions[name]})
 		setmetatable(defaultOptions[name], {__index = KeyboardUIOptions.global})
 	end
@@ -374,43 +440,42 @@ local function configureVoices()
 
 end
 
-frame:RegisterEvent("ADDON_LOADED")
-frame:RegisterEvent("PLAYER_LOGIN")
-frame:RegisterEvent("PLAYER_REGEN_DISABLED")
-frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-
-frame:SetScript("OnEvent", function(__, event, arg1)
-	if event == "ADDON_LOADED" then
-		if arg1 == "KeyboardUI" then
-			options = KeyboardUIOptions
-			for __, module in ipairs(modules) do	-- order matters.  The global one must be first.
-				configureOptions(module.name)
-				if not KeyboardUIOptions[module.name]["enabled"] then
-					module.frame:Hide()
-				end
-				module:onOptionChanged("enabled", function(value) module.frame:SetShown(value) end)
-				module:Init()
+lib:onEvent("ADDON_LOADED", function(arg1)
+	if arg1 == "KeyboardUI" then
+		options = KeyboardUIOptions
+		for __, module in ipairs(modules) do	-- order matters.  The global one must be first.
+			configureOptions(module.name)
+			if not KeyboardUIOptions[module.name]["enabled"] then
+				module.frame:Hide()
 			end
-			frame.numLoaded = #modules
-		elseif frame.numLoaded then
-			for i = frame.numLoaded + 1, #modules do
-				configureOptions(modules[i].name)
-				module.frame:SetShown(KeyboardUIOptions[module.name]["enabled"])
-				module:onOptionChanged("enabled", function(value) module.frame:SetShown(value) end)
-				modules[i]:Init()
-			end
+			module:onOptionChanged("enabled", function(value) module.frame:SetShown(value) end)
+			module:Init()
 		end
-	elseif event == "PLAYER_LOGIN" then
-		C_Timer.After(5, function()
-			configureVoices()
-			if KeyboardUIOptions.global.notFirstTime then
-				modules[1]:ttsQueue("For help with Keyboard UI, type: slash, K, U, I.", KUI_NORMAL, KUI_PP, true)
-			else
-				KeyboardUIOptions.global.notFirstTime = true
-				modules[1]:ttsInterrupt([=[<speak>Welcome to Keyboard UI. <silence msec="500"/> For help, type: slash Keyboard UI, all as one word.  Alternatively, type: slash, K, U, I.</speak>]=], KUI_CASUAL, KUI_P, true)
-			end
-		end)
-	elseif event == "PLAYER_REGEN_DISABLED" and #shownModules > 0 then
+		frame.numLoaded = #modules
+	elseif frame.numLoaded then
+		for i = frame.numLoaded + 1, #modules do
+			configureOptions(modules[i].name)
+			module.frame:SetShown(KeyboardUIOptions[module.name]["enabled"])
+			module:onOptionChanged("enabled", function(value) module.frame:SetShown(value) end)
+			modules[i]:Init()
+		end
+	end
+end)
+
+lib:onEvent("PLAYER_LOGIN", function()
+	C_Timer.After(5, function()
+		configureVoices()
+		if KeyboardUIOptions.global.notFirstTime then
+			lib:ttsQueue("For help with Keyboard UI, type: slash, K, U, I.", KUI_NORMAL, KUI_PP, true)
+		else
+			KeyboardUIOptions.global.notFirstTime = true
+			lib:ttsInterrupt([=[<speak>Welcome to Keyboard UI. <silence msec="500"/> For help, type: slash Keyboard UI, all as one word.  Alternatively, type: slash, K, U, I.</speak>]=], KUI_CASUAL, KUI_P, true)
+		end
+	end)
+end)
+
+lib:onEvent("PLAYER_REGEN_DISABLED", function()
+	if #shownModules > 0 then
 		disableKeybindings()
 	elseif event == "PLAYER_REGEN_ENABLED" and #shownModules > 0 then
 		enableKeybindings()
@@ -433,8 +498,8 @@ function lib:setOption(option, value)
 end
 
 function lib:getOption(option)
-	if KeyboardUIOptions[self.name] then
-		return KeyboardUIOptions[self.name][option]
+	if tempOptions[self.name] then
+		return tempOptions[self.name][option]
 	end
 end
 
@@ -557,38 +622,34 @@ end)
 ttsFrame:SetScript("OnUpdate", function()
 	if #ttsFrame > 0 then
 		local tbl = tremove(ttsFrame,1)
-		C_VoiceChat.SpeakText(unpack(tbl))
 		ttsFrame.current = tbl[2]
-	else
-		ttsFrame:Hide()
+		C_VoiceChat.SpeakText(unpack(tbl))
 	end
 end)
 
 -- say something when previous messages have finished
 function lib:ttsQueue(text, rate, dynamics, useEnglish)
-	local volume = (dynamics or KUI_MF) * self:getOption("volume")
+	local volume = self:getOption("volumeMax") * (1 - (dynamics or KUI_MF) * self:getOption("volumeVariance") / 50)
 	if KUI_VOICE and volume > 0  and text and text ~= "" and self:getOption("enabled") then
-		if rate == nil or rate > 0 then
-			rate = floor((rate or KUI_NORMAL) * self:getOption("speed"))
-		end
+		rate = self:getOption("speedMax") + (rate or KUI_NORMAL) * self:getOption("speedVariance")
 		if text:sub(1,1) == "<" and not text:sub(1,7) == "<speak>" then
 			text = text:gsub("[\<\>]", " -- ")
 		end
-		tinsert(ttsFrame, {useEnglish and KUI_VOICE_ENGLISH or KUI_VOICE, text, Enum.VoiceTtsDestination.QueuedLocalPlayback, rate, volume})
-		ttsFrame:Show()
+		tinsert(ttsFrame, {useEnglish and KUI_VOICE_ENGLISH or KUI_VOICE, text, Enum.VoiceTtsDestination.LocalPlayback, rate, volume})
 	end
 end
 
 function lib:ttsYield(...)
-	if #ttsFrame == 0 and not ttsFrame:IsShown() then
+	if #ttsFrame == 0 and ttsFrame:IsShown() then
 		self:ttsQueue(...)
 		return true
 	end
 end
 
 function lib:ttsStopMessage(text)
-	if ttsFrame.current == text then
+	if text and ttsFrame.current == text then
 		C_VoiceChat.StopSpeakingText()
+		ttsFrame.current = nil
 	end
 end
 
@@ -607,24 +668,26 @@ function lib:ttsInterrupt(...)
 end
 
 local function hideTooltip()
-	C_VoiceChat.StopSpeakingText()
 	GameTooltip:Hide()
 end
 
 function lib:displayTooltip(frame, title, optLine2, optAnchor, optOwner)
-	frame:SetScript("OnLeave", hideTooltip)
-	GameTooltip:SetOwner(optOwner or frame, optAnchor or "ANCHOR_RIGHT")
-	GameTooltip:SetText(title)
-	if (optLine2) then
-		GameTooltip:AddLine(optLine2, 0.9, 0.9, 0.9)
-		title = title .. ": " .. optLine2
-		GameTooltip:Show()
+	if title then
+		if not frame.kuiOnLeaveHooked then
+			frame:HookScript("OnLeave", hideTooltip)
+		end
+		GameTooltip:SetOwner(optOwner or frame, optAnchor or "ANCHOR_RIGHT")
+		GameTooltip:SetText(title)
+		if optLine2 then
+			GameTooltip:AddLine(optLine2, 0.9, 0.9, 0.9)
+			title = title .. ": " .. optLine2
+			GameTooltip:Show()
+		end
 	end
-	self:ttsInterrupt(title, KUI_QUICK, nil)
 end
 
 -------------------------
--- Keybinds (this is temporary code until real keybinds are added)
+-- Keybindings continued
 
 local function getCurrentModule()
 	return shownModules[#shownModules]
@@ -777,15 +840,11 @@ function lib:afterCombat(func, ...)
 	end
 end
 
-local frame = CreateFrame("Frame")
-frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-frame:SetScript("OnEvent", function(__, event)
-	if event == "PLAYER_REGEN_ENABLED" then
-		for __, funcAndArgs in ipairs(queueDuringCombat) do
-			local retOK, msg = pcall(unpack(funcAndArgs))
-			if not retOK and msg then
-				print("Keyboard UI caught an error: " .. msg)
-			end
+lib:onEvent("PLAYER_REGEN_ENABLED", function()
+	for __, funcAndArgs in ipairs(queueDuringCombat) do
+		local retOK, msg = pcall(unpack(funcAndArgs))
+		if not retOK and msg then
+			print("Keyboard UI caught an error: " .. msg)
 		end
 	end
 end)
@@ -838,53 +897,176 @@ end
 
 -------------------------
 -- Global mouse integration
+do
+	local onEnter, onEnterSayNPC, onEnterSayGroup, onEnterSayObject, onEnterSayUI, 
+		onEnterSayFullTooltip, onEnterPing, onEnterRequiresMouseMovement = true, true, true, true, true, true, true
 
-local function getTextFromAnyWidget(obj, line)
-	if GameTooltip:IsShown() and GameTooltip:GetOwner() == obj then
-		local left, right = _G["GameTooltipTextLeft"..line], _G["GameTooltipTextRight"..line]
-		if left and right then
-			local left, right = left:GetText(), right:GetText()
-			if right and right ~= "" then
-				return left and left.."; "..right or right
-			else
-				return left
-			end
-		end
-	elseif line == 1 then
-		if type(obj.text) == "table" and type(obj.text.GetText) == "function" then
-			return obj.text:GetText()
-		elseif type(obj.Text) == "table" and type(obj.Text.GetText) == "function" then
-			return obj.Text:GetText()
+	-- World Frame
+	
+	local monitorNonPlayers
+	local lastWorldFrameMessage
+	local lastWorldFramePing
+	local lastWorldFramePingInProgress
+	
+	local lastUIObject
+	local lastUIObjectLine
+	
+	local function stopMonitoringTooltip()
+		if not GameTooltip:IsShown() then
+			monitorNonPlayers = false
 		end
 	end
-end
 
-local prevMouseFocus
-local focusTicks
-local mouseTicker = C_Timer.NewTicker(0.05, function()
-	local mouseFocus = GetMouseFocus()
-	if mouseFocus and mouseFocus ~= WorldFrame and getTextFromAnyWidget(mouseFocus, 1) then
-		if mouseFocus ~= prevMouseFocus then
-			focusTicks = -10
-			PlaySound(823)
-			prevMouseFocus = mouseFocus
-		elseif focusTicks < 0 or focusTicks%5 ~= 0 then
-			focusTicks = focusTicks + 1
-		else
-			mouseFocus.kuiMouseOverText = getTextFromAnyWidget(mouseFocus, focusTicks/5 + 1)
-			if mouseFocus.kuiMouseOverText and modules[1]:ttsYield(mouseFocus.kuiMouseOverText, KUI_RAPID, KUI_PP) then	
-				focusTicks = focusTicks + 1
-				if not mouseFocus.kuiMouseHooked then
-					mouseFocus.kuiMouseHooked = true
-					mouseFocus:HookScript("OnLeave", function()
-						modules[1]:ttsStopMessage(mouseFocus.kuiMouseOverText)
-					end)
+	lib:onEvent("CURSOR_UPDATE", function()
+		if GetMouseFocus() == WorldFrame then
+			monitorNonPlayers = true
+			GameTooltip:Hide()
+			C_Timer.After(0, stopMonitoringTooltip)
+		end
+	end)
+		
+	local function monitorWorldFrameTooltips()
+		local mouseFocus = GetMouseFocus()
+		if mouseFocus == WorldFrame and onEnter and (
+			onEnterSayNPC and monitorNonPlayers and UnitExists("mouseover") and not UnitIsPlayer("mouseover")
+			or onEnterSayGroup and UnitExists("mouseover") and (UnitInParty("mouseover") or UnitInRaid("mouseover"))
+			or onEnterSayObject and monitorNonPlayers and GameTooltip:IsShown() and not UnitExists("mouseover")
+		) then
+			local message = GameTooltipTextLeft1:GetText()
+			if onEnterPing and message and message ~= lastWorldFramePing then
+				__, lastWorldFramePingInProgress = PlaySound(823, nil, nil, true)
+				lastWorldFramePing = message
+			end
+			if message and message ~= lastWorldFrameMessage and not lastWorldFramePingInProgress then
+				-- lib:ttsStopMessage(lastWorldFrameMessage) -- this causes stuttering in Patch 9.1.5; but in the 9.2 PTR it seems to work
+				if lib:ttsYield(GameTooltipTextLeft1:GetText(), KUI_RAPID, KUI_PP) then
+					lastWorldFrameMessage = message
 				end
 			end
+		elseif mouseFocus and GameTooltip:IsShown() and (mouseFocus == GameTooltip:GetOwner() or mouseFocus:GetScript("OnLeave") ~= nil) and select(2, GameTooltip:GetOwner()) ~= "ANCHOR_NONE" then
+			monitorNonPlayers = nil
+			lastWorldFramePing = nil
+			lastWorldFrameMessage = nil
+			if mouseFocus ~= lastUIObject then
+				lastUIObjectLine = 1
+				lastUIObject = mouseFocus
+			end
+			if lastUIObjectLine > 1 and not onEnterSayFullTooltip then
+				return
+			end
+			local left, right = _G["GameTooltipTextLeft"..lastUIObjectLine], _G["GameTooltipTextRight"..lastUIObjectLine]
+			if left and right then
+				left = left:GetText()
+				right = right:GetText()
+			end
+			if lastUIObjectLine == 1 and (right == "" or not right) and mouseFocus.GetMap and mouseFocus.GetGlobalPosition and mouseFocus:GetMap() == WorldMapFrame then
+				local uiMapID = WorldMapFrame:GetMapID()
+				if uiMapID and uiMapID == C_Map.GetBestMapForUnit("player") then
+					local playerPosition = C_Map.GetPlayerMapPosition(uiMapID, "player")
+					local pinX, pinY = mouseFocus:GetGlobalPosition()
+					local x, y = playerPosition:GetXY()
+					if playerPosition and pinX and pinY and x and y and (x > 0 or y > 0) then
+						
+						x = pinX - x
+						y = pinY - y
+						if abs(x) < 0.05 and abs(y) < 0.05 then
+							right = NEAR
+						elseif abs(x) > 2 * abs(y) then
+							right = x > 0 and "east" or "west"
+						elseif abs(y) > 2 * abs(x) then
+							right = y > 0 and "south" or "north"
+						elseif x > 0 then
+							right = y > 0 and "southeast" or "northeast"
+						else
+							right = y > 0 and "southwest" or "northwest"
+						end
+						if abs(x) + abs(y) > 0.3 and C_Map.GetMapInfo(uiMapID).mapType == Enum.UIMapType.Zone then
+							right = FAR .. " " .. right
+						end
+					end
+				end
+			end
+			if left and right and right ~= "" and lib:ttsYield(left .. "; " .. right, KUI_RAPID, KUI_PP)
+				or left and left ~= "" and lib:ttsYield(left, KUI_RAPID, KUI_PP)
+			then
+				lastUIObjectLine = lastUIObjectLine + 1
+			end
+		elseif mouseFocus and (mouseFocus.GetText or mouseFocus.text or mouseFocus.Text) then
+			monitorNonPlayers = nil
+			lastWorldFramePing = nil
+			lastWorldFrameMessage = nil
+			if mouseFocus ~= lastUIObject then
+				lastUIObjectLine = 1
+				lastUIObject = mouseFocus
+			end
+		else
+			monitorNonPlayers = false
+			lastWorldFramePing = nil
+			lastWorldFrameMessage = nil
 		end
 	end
-end)
 
+	local function resetTooltipMonitor()
+		monitorNonPlayers = false
+		lastWorldFramePing = nil
+		lastWorldFrameMessage = nil
+	end
+
+	GameTooltip:HookScript("OnUpdate", monitorWorldFrameTooltips)
+	GameTooltip:HookScript("OnHide", resetTooltipMonitor)
+		
+	lib:onEvent("SOUNDKIT_FINISHED", function(soundHandle)
+		if soundHandle == lastWorldFramePingInProgress then
+			lastWorldFramePingInProgress = nil
+		end
+	end)
+		
+	-- All other UI
+	
+	local uiTicker
+	
+	local function getTextFromAnyWidget(obj, line)
+		if GameTooltip:IsShown() and GameTooltip:GetOwner() == obj then
+			local left, right = _G["GameTooltipTextLeft"..line], _G["GameTooltipTextRight"..line]
+			if left and right then
+				local left, right = left:GetText(), right:GetText()
+				if right and right ~= "" then
+					return left and left.."; "..right or right
+				else
+					return left
+				end
+			end
+		elseif line == 1 then
+			if type(obj) == "table" and type(obj.GetText) == "function" then
+				return obj:GetText()
+			elseif type(obj.text) == "table" and type(obj.text.GetText) == "function" then
+				return obj.text:GetText()
+			elseif type(obj.Text) == "table" and type(obj.Text.GetText) == "function" then
+				return obj.Text:GetText()
+			end
+		end
+	end
+	
+	local function describeUIElements()
+	
+	end
+	
+	local function setOnEnter(val)
+		onEnter = val
+		if val and onEnterSayUI and GetMouseFocus() ~= WorldFrame then
+			uiTicker = uiTicker or C_Timer.NewTicker(0.05, describeUIElements)
+		elseif uiTicker then
+			uiTicker:Cancel()
+			uiTicker = nil
+		end
+	end
+	
+	lib:onOptionChanged("onEnter", setOnEnter)
+	lib:onEvent("PLAYER_LOGIN", function()
+		setOnEnter(lib:getOption("onEnter"))
+	end)
+
+end
 
 -------------------------
 -- Options Menu
@@ -991,7 +1173,7 @@ scrollChild:SetScript("OnShow", function()
 						frame.parent.next:SetPoint("TOP", frame, "BOTTOM", 0, 20)
 					end
 					if frame.parent:IsObjectType("CheckButton") and frame.Enable then
-						frame.module:onOptionChanged(frame.parentOption, function(value)
+						frame.module:onOptionChanged(parentOption, function(value)
 							if value then
 								frame:Enable()
 							else
@@ -1036,14 +1218,9 @@ scrollChild:SetScript("OnShow", function()
 		frame.description = description
 		insertFrame(parent, frame, parentOption)
 		frame.text:SetText(title)
-		--[[
-		
-			-- this needs more work.  It isn't a good user experience if tooltips interfere with using the keyboard
-		
 		frame:SetScript("OnEnter", function()
 			modules[1]:displayTooltip(frame, "Mouseover: " .. title, frame:GetChecked() and "Checked " or "Unchecked " .. CHAT_HEADER_SUFFIX .. frame.description, "ANCHOR_BOTTOMRIGHT", panel)
 		end)
-		--]]
 		frame:SetChecked(self:getOption(option))
 		frame:SetScript("OnClick", function()
 			local checked = frame:GetChecked()
@@ -1103,14 +1280,9 @@ scrollChild:SetScript("OnShow", function()
 			frame.High:SetText(high or max)
 			frame.Text:SetText(top:format(frame:GetValue()))
 		end
-		--[[
-		
-			-- this needs more work.  It isn't a good user experience if tooltips interfere with using the keyboard
-		
 		frame:SetScript("OnEnter", function()
 			modules[1]:displayTooltip(frame, title, frame.description:format(frame.Text and frame.Text:GetText() or frame:GetValue()), "ANCHOR_BOTTOMRIGHT", panel)
 		end)
-		--]]
 		frame:SetScript("OnValueChanged", function(__, value, userInput)
 			if userInput then
 				if top then
@@ -1152,8 +1324,21 @@ scrollChild:SetScript("OnShow", function()
 	scrollChild[1][1].module = panel
 	scrollChild[1]:SetHeight(scrollChild[1][1]:GetHeight())
 	scrollChild:SetHeight(scrollChild[1][1]:GetHeight())
-	modules[1]:panelSlider("volume", VOLUME, "Set the default volume for all Keyboard UI modules, including these interface options.", 0, 100, 25, OFF, "100%", "%d%%")
-	modules[1]:panelSlider("speed", SPEED, "Adjust the default seaking rate for all Keyboard UI modules, including these interface options.", 0.8, 1.2, 0.2, "slower", "faster", "%.1f")
+	modules[1]:panelSlider("volumeMax", SLASH_TEXTTOSPEECH_HELP_VOLUME and SLASH_TEXTTOSPEECH_HELP_VOLUME:format(0, 100) or VOLUME, "Set the maximum volume for the loudest message.  Most messages will be softer.", 0, 100, 25, OFF, "100%", "%d%%")
+	modules[1]:panelSlider("volumeVariance", VOLUME .. " variance", "Limit how much softer the quietest message can be.", 0, 50, 0, 0, 50, "%d%%")
+	modules[1]:panelSlider("speedMax", SLASH_TEXTTOSPEECH_HELP_RATE and SLASH_TEXTTOSPEECH_HELP_RATE:format(0, 10) or eSPEED, "Set the maximum speaking rate.  Some messages will be slightly slower.", 0, 10, 0.5, "slower", "faster", "+%d")
+	modules[1]:panelSlider("speedVariance", SPEED .. " variance", "Limit how much slower the slowest message can be.  Most messages are not quite this much slower.", 0, 4, 1, 0, -4, "-%d")
+	
+	modules[1]:panelCheckButton("onEnter", BINDING_NAME_INTERACTMOUSEOVER, "Make sounds and read names when moving the mouse.")
+	modules[1]:panelCheckButton("onEnterSayNPC", NPC_NAMES_DROPDOWN_HOSTILE, "Read out names of interactive NPCs.", "onEnter")
+	modules[1]:panelCheckButton("onEnterSayGroup", VOICE_CHAT_PARTY_RAID, "Read out names of interactive NPCs.", "onEnter")
+	modules[1]:panelCheckButton("onEnterSayObject", OBJECTIVES_LABEL, "Read out names of interactive objects.", "onEnter")
+	modules[1]:panelCheckButton("onEnterSayUI", UIOPTIONS_MENU, "Read out buttons and other UI objects.", "onEnter")
+	modules[1]:panelCheckButton("onEnterSayFullTooltip", ITEM_MOUSE_OVER, "Read the complete tooltip during mouseover, instead of waiting for ctrl-space.", "onEnter")
+	modules[1]:panelCheckButton("onEnterPing", SOUND, "Also make a clicking sound.")
+	modules[1]:panelCheckButton("onEnterRequireMouseMovement", ERR_USE_LOCKED_WITH_SPELL_S:format(BUTTON_LAG_MOVEMENT), "Read out names only when the mouse moved; never when something appears that is by chance under the mouse.", "onEnter")
+	
+	
 	
 	for i=2, #modules do
 		local module = modules[i]
@@ -1167,8 +1352,6 @@ scrollChild:SetScript("OnShow", function()
 		scrollChild[i]:SetHeight(scrollChild[i][1]:GetHeight() + 30)
 		scrollChild:SetHeight(scrollChild:GetHeight() + scrollChild[i][1]:GetHeight() + 30)
 		module:panelCheckButton("enabled", ENABLE .. " " .. (module.title or module.name), "Enable " .. (module.title or module.name) .. " when " .. (module.frame:GetName() or "it") .. " appears.")
-		module:panelSlider("volume", VOLUME, "Set the text to speech volume.", 0, 100, 25, "silent", "100%", "%d%%")
-		module:panelSlider("speed", SPEED, "Set the text to speech rate.", 0.8, 1.2, 0.2, "slower", "faster", "%.1f")
 		if savedForLater[module] then
 			for __, tbl in ipairs(savedForLater) do
 				module[tbl[1]](module, select(2,tbl))	--e.g. module["panelCheckButton"](module, ...)
@@ -1307,6 +1490,7 @@ scrollChild:SetScript("OnShow", function()
 		local frame = subEntry > 0 and scrollChild[currentModule][entry][subEntry] or scrollChild[currentModule][entry]
 		if index == 5 then
 			InterfaceOptionsFrameOkay:Click()
+			return OKAY
 		end
 		if frame:IsObjectType("FontString") then
 			return self:NextEntry()
