@@ -78,6 +78,8 @@ local TEXT_TO_SPEECH = TEXT_TO_SPEECH or "Text to speech"	-- Classic compatibili
 local KUI_VOICE					-- defined at PLAYER_LOGIN
 local KUI_VOICE_ENGLISH
 
+KeyboardUI.tooltips = true		-- temporary flag to inform WoWAccess that this version of Keyboard UI has more tooltips installed.
+
 -------------------------
 -- Configuration
 
