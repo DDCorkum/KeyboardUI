@@ -29,21 +29,34 @@ do
 			tinsert(buttons, frame)
 		end
 	end
-	
-	function module:GainFocus()
+
+	local function assertSecureKeybinds()
+		ClearOverrideBindings(module.frame)
 		SetOverrideBindingClick(module.frame, true, module:getOption("bindingDoAction1Button"), "GameMenuButtonLogout")
 		SetOverrideBindingClick(module.frame, true, module:getOption("bindingDoAction2Button"), "GameMenuButtonQuit")
+		if buttons[position] then
+			SetOverrideBindingClick(module.frame, true, module:getOption("bindingDoActionButton"), buttons[position]:GetName())
+		end
+	end
+	
+	local function removeSecureKeybinds()
+		ClearOverrideBindings(module.frame)
+	end
+
+	function module:GainFocus()
+		assertSecureKeybinds()
 		module:ttsYield("Game Menu")
 	end
 	
 	function module:LoseFocus()
-		ClearOverrideBindings(module.frame)
+		removeSecureKeybinds()
 	end
 	
 	function module:NextEntry()
 		if position < #buttons then
 			position = position + 1
 		end
+		assertSecureKeybinds()
 		return buttons[position]:GetText()
 	end
 	
@@ -51,6 +64,7 @@ do
 		if position > 1 then
 			position = position - 1
 		end
+		assertSecureKeybinds()
 		return buttons[position]:GetText()
 	end
 	
@@ -77,3 +91,9 @@ do
 	end
 
 end -- end of GameMenu
+
+do
+
+	local module = {name = "InterfaceOptions", title = INTERFACE_OPTIONS, frame = CreateFrame("Frame", nil, InterfaceOptionsFrame)}
+
+end

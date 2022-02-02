@@ -221,10 +221,12 @@ local L = module.text	-- Optional localization.  A metatable is added during reg
 -------------------------
 -- Private properties
 
--- Lists of all the modules
+-- Modules, which contain options and 1 or more frames
 local modules = {}					-- Modules in the order they were loaded (unless overridden by optIndex)
 local modulesByName = {}			-- Modules in no particular order, to simplify getting them by name
-local shownModules = {}				-- Modules currently visible
+
+-- Frames that are currently visible and associated with a module
+local shownFrames = {}				-- Frames associated to a module that are currently visible, prioritized by frame strata and level
 
 -- Options used by the modules, including the global one
 KeyboardUIOptions = {}				-- SavedVariable
@@ -293,43 +295,41 @@ local stratas = {
 	TOOLTIP = 80000,
 }
 
-local function moduleOnShow(frame)
-	local module = frame.module
-	module.priority = stratas[frame:GetFrameStrata()] + frame:GetFrameLevel()
-	if #shownModules == 0 then
-		shownModules[1] = module
+local function frameOnShow(frame)
+	frame.priority = frame.priority or stratas[frame:GetFrameStrata()] + frame:GetFrameLevel()
+	if #shownFrames == 0 then
+		shownFrames[1] = frame
 		enableKeybindings()
-		module:GainFocus()
-	elseif module.priority > shownModules[#shownModules].priority then
-		shownModules[#shownModules]:LoseFocus()
-		shownModules[#shownModules+1] = module
-		module:GainFocus()
+		frame.module:GainFocus(frame)
+	elseif frame.priority > shownFrames[#shownFrames].priority then
+		shownFrames[#shownFrames].module:LoseFocus(shownFrames[#shownFrames])
+		shownFrames[#shownFrames+1] = frame
+		frame.module:GainFocus(frame)
 	else
 		local i = 1
-		while shownModules[i] and shownModules[i].priority < module.priority do
+		while shownFrames[i] and shownFrames[i].priority < frame.priority do
 			i = i + 1
 		end
-		tinsert(shownModules, i, module)
+		tinsert(shownFrames, i, frame)
 	end
 end
 
-local function moduleOnHide(frame)
-	local module = frame.module
-	local n = #shownModules
-	if n == 1 then
+local function frameOnHide(frame)
+	if #shownFrames == 1 then
 		disableKeybindings()
-		shownModules[1] = nil
+		shownFrames[1] = nil
 	else
-		for i=#shownModules, 1, -1 do
-			if shownModules[i] == module then
-				tremove(shownModules, i)
+		for i=#shownFrames, 1, -1 do
+			if shownFrames[i] == frame then
+				tremove(shownFrames, i)
 				return
 			end
 		end
 	end
 end
 
-local function updatePriorityWhileVisible(frame)
+local function updateFrameStrataAndLevel(frame)
+	frame.priority = nil
 	if frame:IsVisible() then
 		frame:Hide()
 		frame:Show()
@@ -337,7 +337,7 @@ local function updatePriorityWhileVisible(frame)
 end
 
 function KeyboardUI:RegisterModule(module, optIndex)
-	assert(type(module.name) == "string" and module.frame:IsObjectType("Frame") and not modules[module.name], "Invalid module registration")
+	assert(type(module.name) == "string" and (module.frame and module.frame:IsObjectType("Frame") or module.frames) and not modules[module.name], "Invalid module registration")
 	if optIndex then
 		tinsert(modules, optIndex, module)
 		module.id = optIndex
@@ -351,15 +351,26 @@ function KeyboardUI:RegisterModule(module, optIndex)
 	modulesByName[module.name] = module
 	setmetatable(module, {__index = lib})
 	
-	module.frame.module = module
-	module.frame:HookScript("OnShow", moduleOnShow)
-	module.frame:HookScript("OnHide", moduleOnHide)
-	hooksecurefunc(module.frame, "SetFrameStrata", updatePriorityWhileVisible)
-	hooksecurefunc(module.frame, "SetFrameLevel", updatePriorityWhileVisible)
+	if module.frames then
+		for __, frame in pairs(module.frames) do
+			frame.module = module
+			frame:HookScript("OnShow", frameOnShow)
+			frame:HookScript("OnHide", frameOnHide)
+			hooksecurefunc(frame, "SetFrameStrata", updateFrameStrataAndLevel)
+			hooksecurefunc(frame, "SetFrameLevel", updateFrameStrataAndLevel)
+		end
+	else
+		module.frame.module = module
+		module.frame:HookScript("OnShow", frameOnShow)
+		module.frame:HookScript("OnHide", frameOnHide)
+		hooksecurefunc(module.frame, "SetFrameStrata", updateFrameStrataAndLevel)
+		hooksecurefunc(module.frame, "SetFrameLevel", updateFrameStrataAndLevel)
+	end
+	
 end
 
-function lib:hasFocus()
-	return shownModules[#shownModules] == self
+function lib:hasFocus(frame)
+	return #shownFrames > 0 and shownFrames[#shownFrames].module == self and not InCombatLockdown()
 end
 
 -------------------------
@@ -477,9 +488,9 @@ lib:onEvent("PLAYER_LOGIN", function()
 end)
 
 lib:onEvent("PLAYER_REGEN_DISABLED", function()
-	if #shownModules > 0 then
+	if #shownFrames > 0 then
 		disableKeybindings()
-	elseif event == "PLAYER_REGEN_ENABLED" and #shownModules > 0 then
+	elseif event == "PLAYER_REGEN_ENABLED" and #shownFrames > 0 then
 		enableKeybindings()
 	end
 end)
@@ -692,7 +703,7 @@ end
 -- Keybindings continued
 
 local function getCurrentModule()
-	return shownModules[#shownModules]
+	return shownFrames[#shownFrames].module
 end
 
 CreateFrame("Button", "KeyboardUIChangeTabButton"):SetScript("OnClick", function(__, button, down)
@@ -907,11 +918,13 @@ do
 	
 	local monitorNonPlayers
 	local lastWorldFrameMessage
-	local lastWorldFramePing
-	local lastWorldFramePingInProgress
+	local lastOnEnterPing
+	local lastOnEnterPingInProgress
 	
 	local lastUIObject
 	local lastUIObjectLine
+	
+	local noTooltipTicker
 	
 	local function stopMonitoringTooltip()
 		if not GameTooltip:IsShown() then
@@ -935,11 +948,11 @@ do
 			or onEnterSayObject and monitorNonPlayers and GameTooltip:IsShown() and not UnitExists("mouseover")
 		) then
 			local message = GameTooltipTextLeft1:GetText()
-			if onEnterPing and message and message ~= lastWorldFramePing then
-				__, lastWorldFramePingInProgress = PlaySound(823, nil, nil, true)
-				lastWorldFramePing = message
+			if onEnterPing and message and message ~= lastOnEnterPing then
+				__, lastOnEnterPingInProgress = PlaySound(823, nil, nil, true)
+				lastOnEnterPing = message
 			end
-			if message and message ~= lastWorldFrameMessage and not lastWorldFramePingInProgress then
+			if message and message ~= lastWorldFrameMessage and not lastOnEnterPingInProgress then
 				-- lib:ttsStopMessage(lastWorldFrameMessage) -- this causes stuttering in Patch 9.1.5; but in the 9.2 PTR it seems to work
 				if lib:ttsYield(GameTooltipTextLeft1:GetText(), KUI_RAPID, KUI_PP) then
 					lastWorldFrameMessage = message
@@ -947,13 +960,16 @@ do
 			end
 		elseif mouseFocus and GameTooltip:IsShown() and (mouseFocus == GameTooltip:GetOwner() or mouseFocus:GetScript("OnLeave") ~= nil) and select(2, GameTooltip:GetOwner()) ~= "ANCHOR_NONE" then
 			monitorNonPlayers = nil
-			lastWorldFramePing = nil
+			lastOnEnterPing = nil
 			lastWorldFrameMessage = nil
 			if mouseFocus ~= lastUIObject then
 				lastUIObjectLine = 1
 				lastUIObject = mouseFocus
+				if onEnterPing then
+					__, lastOnEnterPingInProgress = PlaySound(823, nil, nil, true)
+				end
 			end
-			if lastUIObjectLine > 1 and not onEnterSayFullTooltip then
+			if lastOnEnterPingInProgress or lastUIObjectLine > 1 and not onEnterSayFullTooltip then
 				return
 			end
 			local left, right = _G["GameTooltipTextLeft"..lastUIObjectLine], _G["GameTooltipTextRight"..lastUIObjectLine]
@@ -993,65 +1009,64 @@ do
 			then
 				lastUIObjectLine = lastUIObjectLine + 1
 			end
-		elseif mouseFocus and (mouseFocus.GetText or mouseFocus.text or mouseFocus.Text) then
+		else
+			monitorNonPlayers = false
+			lastOnEnterPing = nil
+			lastWorldFrameMessage = nil
+		end
+	end
+
+	local function monitorUIElementsWithoutTooltip()
+		local mouseFocus = GetMouseFocus()
+		if mouseFocus ~= WorldFrame then
 			monitorNonPlayers = nil
-			lastWorldFramePing = nil
+			lastOnEnterPing = nil
 			lastWorldFrameMessage = nil
 			if mouseFocus ~= lastUIObject then
 				lastUIObjectLine = 1
 				lastUIObject = mouseFocus
+				if onEnterPing then
+					__, lastOnEnterPingInProgress = PlaySound(823, nil, nil, true)
+				end
 			end
-		else
-			monitorNonPlayers = false
-			lastWorldFramePing = nil
-			lastWorldFrameMessage = nil
+			if lastUIObjectLine == 1 and not lastOnEnterPingInProgress then 
+				local text = mouseFocus.GetText and mouseFocus:GetText() 
+					or type(mouseFocus.text) == "table" and mouseFocus.text.GetText and mouseFocus.text:GetText()
+					or type(mouseFocus.Text) == "table" and mouseFocus.Text.GetText and mouseFocus.Text:GetText()
+				if text then
+					if lib:ttsYield(text, KUI_RAPID, KUI_PP) then
+						lastUIObjectLine = 2
+					end
+				else
+					lastUIObjectLine = 2
+				end
+			end
 		end
 	end
 
 	local function resetTooltipMonitor()
 		monitorNonPlayers = false
-		lastWorldFramePing = nil
+		lastOnEnterPing = nil
 		lastWorldFrameMessage = nil
+		noTooltipTicker = noTooltipTicker or C_Timer.NewTicker(0.1, monitorUIElementsWithoutTooltip)
+	end
+	
+	local function resetNoTooltipMonitor()
+		if noTooltipTicker then
+			noTooltipTicker:Cancel()
+			noTooltipTicker = nil
+		end
 	end
 
 	GameTooltip:HookScript("OnUpdate", monitorWorldFrameTooltips)
 	GameTooltip:HookScript("OnHide", resetTooltipMonitor)
+	GameTooltip:HookScript("OnShow", resetNoTooltipMonitor)
 		
 	lib:onEvent("SOUNDKIT_FINISHED", function(soundHandle)
-		if soundHandle == lastWorldFramePingInProgress then
-			lastWorldFramePingInProgress = nil
+		if soundHandle == lastOnEnterPingInProgress then
+			lastOnEnterPingInProgress = nil
 		end
-	end)
-		
-	-- All other UI
-	
-	local uiTicker
-	
-	local function getTextFromAnyWidget(obj, line)
-		if GameTooltip:IsShown() and GameTooltip:GetOwner() == obj then
-			local left, right = _G["GameTooltipTextLeft"..line], _G["GameTooltipTextRight"..line]
-			if left and right then
-				local left, right = left:GetText(), right:GetText()
-				if right and right ~= "" then
-					return left and left.."; "..right or right
-				else
-					return left
-				end
-			end
-		elseif line == 1 then
-			if type(obj) == "table" and type(obj.GetText) == "function" then
-				return obj:GetText()
-			elseif type(obj.text) == "table" and type(obj.text.GetText) == "function" then
-				return obj.text:GetText()
-			elseif type(obj.Text) == "table" and type(obj.Text.GetText) == "function" then
-				return obj.Text:GetText()
-			end
-		end
-	end
-	
-	local function describeUIElements()
-	
-	end
+	end)	
 	
 	local function setOnEnter(val)
 		onEnter = val
@@ -1293,7 +1308,7 @@ scrollChild:SetScript("OnShow", function()
 				setTempOption(self, option, value)
 			end
 		end)
-		frame:HookScript("OnMouseUp", function(w)
+		frame:HookScript("OnMouseUp", function()
 			if not down then
 				modules[1]:ttsInterrupt(frame.Text and frame.Text:GetText() or frame:GetValue())
 			end
@@ -1327,9 +1342,9 @@ scrollChild:SetScript("OnShow", function()
 	scrollChild[1]:SetHeight(scrollChild[1][1]:GetHeight())
 	scrollChild:SetHeight(scrollChild[1][1]:GetHeight())
 	modules[1]:panelSlider("volumeMax", SLASH_TEXTTOSPEECH_HELP_VOLUME and SLASH_TEXTTOSPEECH_HELP_VOLUME:format(0, 100) or VOLUME, "Set the maximum volume for the loudest message.  Most messages will be softer.", 0, 100, 25, OFF, "100%", "%d%%")
-	modules[1]:panelSlider("volumeVariance", VOLUME .. " variance", "Limit how much softer the quietest message can be.", 0, 50, 0, 0, 50, "%d%%")
+	modules[1]:panelSlider("volumeVariance", VOLUME .. " variance", "Limit how much softer the quietest message can be.", 0, 50, 0, 0, 50, "%d%%", "volumeMax")
 	modules[1]:panelSlider("speedMax", SLASH_TEXTTOSPEECH_HELP_RATE and SLASH_TEXTTOSPEECH_HELP_RATE:format(0, 10) or eSPEED, "Set the maximum speaking rate.  Some messages will be slightly slower.", 0, 10, 0.5, "slower", "faster", "+%d")
-	modules[1]:panelSlider("speedVariance", SPEED .. " variance", "Limit how much slower the slowest message can be.  Most messages are not quite this much slower.", 0, 4, 1, 0, -4, "-%d")
+	modules[1]:panelSlider("speedVariance", SPEED .. " variance", "Limit how much slower the slowest message can be.  Most messages are not quite this much slower.", 0, 4, 1, 0, -4, "-%d", "speedMax")
 	
 	modules[1]:panelCheckButton("onEnter", BINDING_NAME_INTERACTMOUSEOVER, "Make sounds and read names when moving the mouse.")
 	modules[1]:panelCheckButton("onEnterSayNPC", NPC_NAMES_DROPDOWN_HOSTILE, "Read out names of interactive NPCs.", "onEnter")
