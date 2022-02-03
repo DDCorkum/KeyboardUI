@@ -19,10 +19,10 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
-0.7 (2022-02-01) by Dahk Celes
+0.7 (2022-02-03) by Dahk Celes
 - More TTS when hovering over the game world and UI
 - More control over TTS volume and rate
-- Keyboard navigation of the game menu
+- New modules: game menu and interface options
 
 0.6 (2022-01-27) by Dahk Celes
 - Spell book and action bar improvements
