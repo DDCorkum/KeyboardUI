@@ -964,7 +964,7 @@ do
 					lastWorldFrameMessage = message
 				end
 			end
-		elseif mouseFocus and GameTooltip:IsShown() and (mouseFocus == GameTooltip:GetOwner() or mouseFocus:GetScript("OnLeave") ~= nil) and select(2, GameTooltip:GetOwner()) ~= "ANCHOR_NONE" then
+		elseif mouseFocus and onEnter and onEnterSayUI and GameTooltip:IsShown() and (mouseFocus == GameTooltip:GetOwner() or mouseFocus:GetScript("OnLeave") ~= nil) and select(2, GameTooltip:GetOwner()) ~= "ANCHOR_NONE" then
 			monitorNonPlayers = nil
 			lastOnEnterPing = nil
 			lastWorldFrameMessage = nil
@@ -1078,14 +1078,31 @@ do
 		onEnter = val
 		if val and not GameTooltip:IsShown() then
 			resetTooltipMonitor()
+		else
+			resetNoTooltipMonitor()
 		end
 	end
-	
+		
 	lib:onOptionChanged("onEnter", setOnEnter)
 	lib:onEvent("PLAYER_LOGIN", function()
+		OnEnterSayNPC = lib:getOption("onEnterSayNPC")
+		OnEnterSayObject = lib:getOption("onEnterSayObject")
+		OnEnterSayUI = lib:getOption("onEnterSayUI")
+		OnEnterSayFullTooltip = lib:getOption("onEnterSayFullTooltip")
+		OnEnterPing = lib:getOption("onEnterPing")
+		OnEnterRequiresMouseMovement = lib:getOption("onEnterRequiresMouseMovement")
+		
+		-- save this for last
 		setOnEnter(lib:getOption("onEnter"))
 	end)
-
+	
+	lib:onOptionChanged("onEnterSayGroup", function(value) onEnterSayGroup = value end)
+	lib:onOptionChanged("onEnterSayNPC", function(value) onEnterNPC = value end)
+	lib:onOptionChanged("onEnterSayObject", function(value) onEnterSayObject = value end)
+	lib:onOptionChanged("onEnterSayUI", function(value) onEnterSayUI = value end)
+	lib:onOptionChanged("onEnterSayFullTooltip", function(value) onEnterSayFullTooltip = value end)
+	lib:onOptionChanged("onEnterPing", function(value) onEnterPing = value end)
+	lib:onOptionChanged("onEnterRequiresMouseMovement", function(value) onEnterRequiresMouseMovement = value end)
 end
 
 -------------------------
