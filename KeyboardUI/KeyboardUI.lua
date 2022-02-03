@@ -623,12 +623,17 @@ end
 local ttsFrame = CreateFrame("Frame", "Foo")
 ttsFrame:RegisterEvent("VOICE_CHAT_TTS_PLAYBACK_STARTED")
 ttsFrame:RegisterEvent("VOICE_CHAT_TTS_PLAYBACK_FINISHED")
+ttsFrame:RegisterEvent("PLAYER_LOGOUT")
 ttsFrame:SetScript("OnEvent", function(__, event)
 	if event == "VOICE_CHAT_TTS_PLAYBACK_STARTED" then
 		ttsFrame:Hide()
 	elseif event == "VOICE_CHAT_TTS_PLAYBACK_FINISHED" then
 		ttsFrame.current = nil
 		ttsFrame:Show()
+	elseif event == "PLAYER_LOGOUT" then
+		if ttsFrame.current then
+			C_VoiceChat.StopSpeakingText()
+		end
 	end
 end)
 
@@ -644,6 +649,7 @@ end)
 function lib:ttsQueue(text, rate, dynamics, useEnglish)
 	local volume = self:getOption("volumeMax") * (1 - (dynamics or KUI_MF) * self:getOption("volumeVariance") / 50)
 	if KUI_VOICE and volume > 0  and text and text ~= "" and self:getOption("enabled") then
+		text = tostring(text)
 		rate = self:getOption("speedMax") + (rate or KUI_NORMAL) * self:getOption("speedVariance")
 		if text:sub(1,1) == "<" and not text:sub(1,7) == "<speak>" then
 			text = text:gsub("[\<\>]", " -- ")
@@ -1048,7 +1054,7 @@ do
 		monitorNonPlayers = false
 		lastOnEnterPing = nil
 		lastWorldFrameMessage = nil
-		noTooltipTicker = noTooltipTicker or C_Timer.NewTicker(0.1, monitorUIElementsWithoutTooltip)
+		noTooltipTicker = noTooltipTicker or onEnter and onEnterSayUI and C_Timer.NewTicker(0.1, monitorUIElementsWithoutTooltip)
 	end
 	
 	local function resetNoTooltipMonitor()
@@ -1070,11 +1076,8 @@ do
 	
 	local function setOnEnter(val)
 		onEnter = val
-		if val and onEnterSayUI and GetMouseFocus() ~= WorldFrame then
-			uiTicker = uiTicker or C_Timer.NewTicker(0.05, describeUIElements)
-		elseif uiTicker then
-			uiTicker:Cancel()
-			uiTicker = nil
+		if val and not GameTooltip:IsShown() then
+			resetTooltipMonitor()
 		end
 	end
 	
@@ -1095,6 +1098,8 @@ panel:Hide()	-- important to trigger scrollFrame OnShow()
 
 local kuiOptions = {name = "global", frame = panel, title = TEXT_TO_SPEECH}
 KeyboardUI:RegisterModule(kuiOptions)	-- this happens after the panel is added to InterfaceOptions so it has a parent
+panel:SetScript("OnShow", nil)
+panel:SetScript("OnHide", nil)
 
 function panel.default()
 	for name, module in pairs(modulesByName) do
@@ -1300,13 +1305,11 @@ scrollChild:SetScript("OnShow", function()
 		frame:SetScript("OnEnter", function()
 			modules[1]:displayTooltip(frame, title, frame.description:format(frame.Text and frame.Text:GetText() or frame:GetValue()), "ANCHOR_BOTTOMRIGHT", panel)
 		end)
-		frame:SetScript("OnValueChanged", function(__, value, userInput)
-			if userInput then
-				if top then
-					frame.Text:SetText(top:format(value))
-				end
-				setTempOption(self, option, value)
+		frame:SetScript("OnValueChanged", function(__, value)
+			if top then
+				frame.Text:SetText(top:format(value))
 			end
+			setTempOption(self, option, value)
 		end)
 		frame:HookScript("OnMouseUp", function()
 			if not down then
@@ -1341,10 +1344,10 @@ scrollChild:SetScript("OnShow", function()
 	scrollChild[1][1].module = panel
 	scrollChild[1]:SetHeight(scrollChild[1][1]:GetHeight())
 	scrollChild:SetHeight(scrollChild[1][1]:GetHeight())
-	modules[1]:panelSlider("volumeMax", SLASH_TEXTTOSPEECH_HELP_VOLUME and SLASH_TEXTTOSPEECH_HELP_VOLUME:format(0, 100) or VOLUME, "Set the maximum volume for the loudest message.  Most messages will be softer.", 0, 100, 25, OFF, "100%", "%d%%")
-	modules[1]:panelSlider("volumeVariance", VOLUME .. " variance", "Limit how much softer the quietest message can be.", 0, 50, 0, 0, 50, "%d%%", "volumeMax")
-	modules[1]:panelSlider("speedMax", SLASH_TEXTTOSPEECH_HELP_RATE and SLASH_TEXTTOSPEECH_HELP_RATE:format(0, 10) or eSPEED, "Set the maximum speaking rate.  Some messages will be slightly slower.", 0, 10, 0.5, "slower", "faster", "+%d")
-	modules[1]:panelSlider("speedVariance", SPEED .. " variance", "Limit how much slower the slowest message can be.  Most messages are not quite this much slower.", 0, 4, 1, 0, -4, "-%d", "speedMax")
+	modules[1]:panelSlider("volumeMax", VOLUME, "Set the maximum volume for the loudest message.  Most messages will be softer.", 0, 100, 25, OFF, "100%", "%d%%")
+	modules[1]:panelSlider("volumeVariance", VOLUME .. " variance", "Limit how much softer the quietest message can be.", 0, 50, 10, 0, 50, "%d%%")
+	modules[1]:panelSlider("speedMax", SPEED, "Set the maximum speaking rate.  Some messages will be slightly slower.", 0, 10, 0.5, "slower", "faster", "+%.1f")
+	modules[1]:panelSlider("speedVariance", SPEED .. " variance", "Limit how much slower the slowest message can be.  Most messages are not quite this much slower.", 0, 4, 1, 0, -4, "-%d")
 	
 	modules[1]:panelCheckButton("onEnter", BINDING_NAME_INTERACTMOUSEOVER, "Make sounds and read names when moving the mouse.")
 	modules[1]:panelCheckButton("onEnterSayNPC", NPC_NAMES_DROPDOWN_HOSTILE, "Read out names of interactive NPCs.", "onEnter")
@@ -1354,8 +1357,6 @@ scrollChild:SetScript("OnShow", function()
 	modules[1]:panelCheckButton("onEnterSayFullTooltip", ITEM_MOUSE_OVER, "Read the complete tooltip during mouseover, instead of waiting for ctrl-space.", "onEnter")
 	modules[1]:panelCheckButton("onEnterPing", SOUND, "Also make a clicking sound.")
 	modules[1]:panelCheckButton("onEnterRequireMouseMovement", ERR_USE_LOCKED_WITH_SPELL_S:format(BUTTON_LAG_MOVEMENT), "Read out names only when the mouse moved; never when something appears that is by chance under the mouse.", "onEnter")
-	
-	
 	
 	for i=2, #modules do
 		local module = modules[i]
@@ -1368,179 +1369,11 @@ scrollChild:SetScript("OnShow", function()
 		scrollChild[i][1].module = module
 		scrollChild[i]:SetHeight(scrollChild[i][1]:GetHeight() + 30)
 		scrollChild:SetHeight(scrollChild:GetHeight() + scrollChild[i][1]:GetHeight() + 30)
-		module:panelCheckButton("enabled", ENABLE .. " " .. (module.title or module.name), "Enable " .. (module.title or module.name) .. " when " .. (module.frame:GetName() or "it") .. " appears.")
+		module:panelCheckButton("enabled", ENABLE .. " " .. (module.title or module.name), "Enable keyboard navigation when " .. (module.title or module.name) .. " appears.")
 		if savedForLater[module] then
 			for __, tbl in ipairs(savedForLater) do
 				module[tbl[1]](module, select(2,tbl))	--e.g. module["panelCheckButton"](module, ...)
 			end
-		end
-	end
-	
-
-	-- now create the panel's functions, because its possible from this point forward for them to be called.
-	
-	local txtFuncs =
-		{
-			FontString = function(self) return self:GetText(), self.description end,
-			CheckButton = function(self) return self.text:GetText(), self.description end,
-			Slider = function(self) return self.text:GetText(), self.description end,
-		}
-
-	local currentModule, entry, subEntry = 1, 0, 0
-
-	function kuiOptions:NextGroup()
-		if currentModule < #modules then
-			currentModule = currentModule + 1
-		else
-			currentModule = 1
-		end
-		entry, subEntry = 1, 0
-		return txtFuncs.FontString(scrollChild[currentModule][1])
-	end
-
-	function kuiOptions:PrevGroup()
-		if currentModule > 1 then
-			currentModule = currentModule - 1
-		else
-			currentModule = #modules
-		end
-		entry, subEntry = 1, 0
-		return txtFuncs.FontString(scrollChild[currentModule][1])
-	end
-
-	function kuiOptions:NextEntry()
-		local parentFrame = scrollChild[currentModule]
-		if entry > 0 and #parentFrame[entry] > subEntry and (
-			parentFrame[entry]:IsObjectType("CheckButton") and parentFrame[entry]:GetChcked()
-			or parentFrame[entry]:IsObjectType("Slider") and parentFrame[entry]:GetValue() > parentFrame[entry]:GetMinMaxValues()
-		) then
-			subEntry = subEntry + 1
-			local frame = parentFrame[entry][subEntry]
-			return txtFuncs[frame:GetObjectType()](frame)
-		elseif #parentFrame > entry then
-			entry, subEntry = entry + 1, 0
-			local frame = parentFrame[entry]
-			return txtFuncs[frame:GetObjectType()](frame)
-		else
-			return kuiOptions:NextGroup()
-		end
-	end
-
-	function kuiOptions:PrevEntry()
-		local parentFrame = scrollChild[currentModule]
-		if subEntry > 1 then
-			subEntry = subEntry - 1
-			local frame = parentFrame[entry][subEntry]
-			return txtFuncs[frame:GetObjectType()](frame)
-		elseif subEntry == 1 then
-			subEntry = 0
-			local frame = parentFrame[entry]
-			return txtFuncs[frame:GetObjectType()](frame)
-		elseif entry > 1 then
-			entry = entry - 1
-			local frame = parentFrame[entry]
-			return txtFuncs[frame:GetObjectType()](frame)
-		else
-			return kuiOptions:PrevGroup()
-		end
-	end
-
-	function kuiOptions:RefreshEntry()
-		if subEntry > 0 then
-			local frame = scrollChild[currentModule][entry][subEntry]
-			return txtFuncs[frame:GetObjectType()](frame)
-		elseif entry > 0 then
-			local frame = scrollChild[currentModule][entry]
-			return txtFuncs[frame:GetObjectType()](frame)
-		else
-			return kuiOptions:NextEntry()
-		end
-	end
-
-	function kuiOptions:GetEntryLongDescription()
-		if subEntry > 0 then
-			return scrollChild[currentModule][entry][subEntry].description
-		elseif entry > 0 then
-			return scrollChild[currentModule][entry].description
-		end
-	end
-
-	function kuiOptions:Forward()
-		local frame = subEntry > 0 and scrollChild[currentModule][entry][subEntry] or scrollChild[currentModule][entry]
-		if frame:IsObjectType("Slider") then
-			local min, max = frame:GetMinMaxValues()
-			local value = frame:GetValue()
-			local step = frame:GetValueStep()
-			if value + step > max then
-				setTempOption(frame.module, frame.option, max)
-			elseif value < min then
-				setTempOption(frame.module, frame.option, min)
-			else
-				setTempOption(frame.module, frame.option, value + step)
-			end
-			return frame.Text and frame.Text:GetText() or value
-		else
-			return self:DoAction()
-		end
-	end
-
-	function kuiOptions:Backward()
-		local frame = subEntry > 0 and scrollChild[currentModule][entry][subEntry] or scrollChild[currentModule][entry]
-		if frame:IsObjectType("Slider") then
-			local min, max = frame:GetMinMaxValues()
-			local value = frame:GetValue()
-			local step = frame:GetValueStep()
-			if value - step < min then
-				setTempOption(frame.module, frame.option, min)
-			elseif value > max then
-				setTempOption(frame.module, frame.option, max)
-			else
-				setTempOption(frame.module, frame.option, value - step)
-			end
-			return frame.Text and frame.Text:GetText() or value
-		else
-			return self:DoAction()
-		end	
-	end
-
-	function kuiOptions:DoAction(index)
-		local frame = subEntry > 0 and scrollChild[currentModule][entry][subEntry] or scrollChild[currentModule][entry]
-		if index == 5 then
-			InterfaceOptionsFrameOkay:Click()
-			return OKAY
-		end
-		if frame:IsObjectType("FontString") then
-			return self:NextEntry()
-		elseif frame:IsObjectType("CheckButton") then
-			frame:Click()
-			return
-		elseif frame:IsObjectType("Slider") then
-			if index == 1 then
-				frame:SetValue(frame:GetMinMaxValues())
-				setTempOption(frame.module, frame.option, frame:GetValue())
-				return frame.Text and frame.Text:GetText() or frame:GetValue()
-			elseif index == 2 then
-				frame:SetValue(defaultOptions[frame.module.name][frame.option])
-				setTempOption(frame.module, frame.option, frame:GetValue())
-				return frame.Text and frame.Text:GetText() or frame:GetValue()
-			elseif index == 3 then
-				frame:SetValue(select(2, frame:GetMinMaxValues()))
-				setTempOption(frame.module, frame.option, frame:GetValue())
-				return frame.Text and frame.Text:GetText() or frame:GetValue()
-			else
-				return self:Actions()
-			end
-		end
-	end
-
-	function kuiOptions:Actions()
-		local frame = subEntry > 0 and scrollChild[currentModule][entry][subEntry] or scrollChild[currentModule][entry]
-		if frame:IsObjectType("FontString") then
-			return "Advance to the next setting", nil, nil, nil, "Save and exit options"
-		elseif frame:IsObjectType("CheckButton") then
-			return frame:GetChecked() and "Remove checkmark" or "Add checkmark", nil, nil, "Save and exit options"
-		elseif frame:IsObjectType("Slider") then
-			return "Lowest value", "Default value", "Highest value", nil, "Save and exit options"
 		end
 	end
 
