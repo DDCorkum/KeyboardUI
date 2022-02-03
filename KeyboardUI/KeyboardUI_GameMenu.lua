@@ -110,7 +110,7 @@ do
 	local entry, entries, labels = 0, {}, {}
 	
 	function module:ChangeTab()
-		if module.frames[1]:IsShown() then
+		if module.frames[1]:IsVisible() then
 			InterfaceOptionsFrameTab2:Click()
 		else
 			InterfaceOptionsFrameTab1:Click()
@@ -355,7 +355,12 @@ do
 				frame:Click()
 				return getStatus(frame)
 			elseif frame:GetObjectType() == "Frame" and type(frame.initialize) == "function" and frame:GetName() and _G[frame:GetName().."Button"] then
-				_G[frame:GetName().."Button"]:OnMouseDown("LeftButton")
+				local button = _G[frame:GetName().."Button"]
+				if button:GetScript("OnMouseDown") then
+					button:OnMouseDown("LeftButton")
+				else
+					button:Click()
+				end
 				return
 			end
 		end
