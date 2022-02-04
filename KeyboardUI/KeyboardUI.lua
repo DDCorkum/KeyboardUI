@@ -19,7 +19,7 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
-0.7 (2022-02-03) by Dahk Celes
+0.7 (2022-02-04) by Dahk Celes
 - More TTS when hovering over the game world and UI
 - More control over TTS volume and rate
 - New modules: game menu and interface options
@@ -105,7 +105,7 @@ local globalDefaults =
 	-- Default state for all modules
 	enabled = true,								-- Disables a module entirely when false
 	
-	-- Keybindings
+	-- Core keybinds
 	bindingChangeTabButton = "CTRL-TAB",
 	bindingNextGroupButton = "CTRL-SHIFT-DOWN",
 	bindingPrevGroupButton = "CTRL-SHIFT-UP",
@@ -129,6 +129,9 @@ local globalDefaults =
 	bindingDoAction12Button = "ALT-=",
 	bindingReadTitleButton = "CTRL-BACKSPACE",
 	bindingReadDescriptionButton = "CTRL-SPACE",
+	
+	-- Option toggle keybinds
+	bindingToggleOnEnterButton = "ALT-O",
 }
 
 -------------------------
@@ -245,6 +248,7 @@ local events = {}					-- The event handlers for frame, sorted by event
 
 local function enableKeybindings()
 	if not InCombatLockdown() then
+		-- Core bindings
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingChangeTabButton, "KeyboardUIChangeTabButton", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextGroupButton, "KeyboardUINextGroupButton", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevGroupButton, "KeyboardUIPrevGroupButton", "LeftButton")
@@ -268,12 +272,6 @@ local function enableKeybindings()
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction12Button, "KeyboardUIDoAction12Button", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadTitleButton, "KeyboardUIReadTitleButton", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadDescriptionButton, "KeyboardUIReadDescriptionButton", "LeftButton")
-	end
-end
-
-local function enableWorldFrameKeybindings()
-	if not InCombatLockdown() then
-		-- NYI
 	end
 end
 
@@ -506,7 +504,7 @@ function lib:setOption(option, value)
 	assert(KeyboardUIOptions[self.name], "Keyboard UI: The ".. self.name " module tried to access KUI saved variables before module:Init().")
 	if type(option) == "string" and globalDefaults[option] == nil then
 		KeyboardUIOptions[self.name][option] = value
-
+		tempOptions[self.name][option] = nil
 	end
 end
 
@@ -620,7 +618,7 @@ end
 -------------------------
 -- Speech
 
-local ttsFrame = CreateFrame("Frame", "Foo")
+local ttsFrame = CreateFrame("Frame")
 ttsFrame:RegisterEvent("VOICE_CHAT_TTS_PLAYBACK_STARTED")
 ttsFrame:RegisterEvent("VOICE_CHAT_TTS_PLAYBACK_FINISHED")
 ttsFrame:RegisterEvent("PLAYER_LOGOUT")
@@ -824,9 +822,36 @@ CreateFrame("Button", "KeyboardUIReadDescriptionButton"):SetScript("OnClick", fu
 	end
 end)
 
+local function createToggleKeybind(option, bindingOption, buttonName)
+	local button = CreateFrame("Button", buttonName)
+	if KeyboardUIOptions.global[bindingOption] then
+		SetOverrideBindingClick(button, false, KeyboardUIOptions.global[bindingOption], buttonName)
+	end
+	lib:onOptionChanged(bindingOption, function(value)
+		ClearOverrideBindings(button)
+		if value then
+			SetOverrideBindingClick(button, false, value, buttonName)
+		end
+	end)	
+	button:SetScript("OnClick", function()
+		local value = not KeyboardUIOptions.global[option]
+		KeyboardUIOptions.global[option] = value
+		tempOptions.global[option] = nil
+		lib:triggerOptionCallbacks("onEnter", value)
+	end)
+end
+
+lib:onEvent("PLAYER_LOGIN", function()
+	createToggleKeybind("onEnter", "bindingToggleOnEnterButton", "KeyboardUIToggleOnEnterButton")
+end)
+
+
+
 --[[
-	-- unused; should be merged into the options menu.
+-- general keybindings (non-override)
 _G["BINDING_HEADER_KeyboardUI"] = "Keyboard UI"
+_G["BINDING_NAME_CLICK KeyboardUIToggleOnEnterButton"] = "Alt Text"
+
 _G["BINDING_NAME_CLICK KeyboardUIChangeTabButton:LeftButton"] = --
 _G["BINDING_NAME_CLICK KeyboardUINextGroupButton:LeftButton"] = BROWSER_FORWARD_TOOLTIP
 _G["BINDING_NAME_CLICK KeyboardUIPrevGroupButton:LeftButton"] = BROWSER_BACK_TOOLTIP
@@ -1024,7 +1049,7 @@ do
 
 	local function monitorUIElementsWithoutTooltip()
 		local mouseFocus = GetMouseFocus()
-		if mouseFocus ~= WorldFrame then
+		if mouseFocus and mouseFocus ~= WorldFrame then
 			monitorNonPlayers = nil
 			lastOnEnterPing = nil
 			lastWorldFrameMessage = nil
@@ -1366,7 +1391,7 @@ scrollChild:SetScript("OnShow", function()
 	modules[1]:panelSlider("speedMax", SPEED, "Set the maximum speaking rate.  Some messages will be slightly slower.", 0, 10, 0.5, "slower", "faster", "+%.1f")
 	modules[1]:panelSlider("speedVariance", SPEED .. " variance", "Limit how much slower the slowest message can be.  Most messages are not quite this much slower.", 0, 4, 1, 0, -4, "-%d")
 	
-	modules[1]:panelCheckButton("onEnter", BINDING_NAME_INTERACTMOUSEOVER, "Make sounds and read names when moving the mouse.")
+	modules[1]:panelCheckButton("onEnter", BINDING_NAME_INTERACTMOUSEOVER .. " (" .. KeyboardUIOptions.global.bindingToggleOnEnterButton .. " )", "Make sounds and read names when moving the mouse.")
 	modules[1]:panelCheckButton("onEnterSayNPC", NPC_NAMES_DROPDOWN_HOSTILE, "Read out names of interactive NPCs.", "onEnter")
 	modules[1]:panelCheckButton("onEnterSayGroup", VOICE_CHAT_PARTY_RAID, "Read out names of interactive NPCs.", "onEnter")
 	modules[1]:panelCheckButton("onEnterSayObject", OBJECTIVES_LABEL, "Read out names of interactive objects.", "onEnter")
