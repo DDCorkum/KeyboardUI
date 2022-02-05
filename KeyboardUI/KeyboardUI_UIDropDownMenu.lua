@@ -152,7 +152,9 @@ DropDownList1:HookScript("OnShow", function()
 end)
 
 DropDownList1:HookScript("OnHide", function()
-	getButton().Highlight:Hide()
+	if getButton() then
+		getButton().Highlight:Hide()
+	end
 	wipe(currentButtons)
 	removeSecureKeybinds()
 end)
