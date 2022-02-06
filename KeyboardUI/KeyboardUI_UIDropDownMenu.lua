@@ -15,21 +15,25 @@ Refer to KeyboardUI.lua for full details
 
 local KeyboardUI = select(2, ...)
 
+local currentButtons = {}	-- n is the number of open drop down lists (ie, depth); tbl[n] is the button selected within it
+
+local function getName(offset)
+	return #currentButtons > 0 and "DropDownList" .. #currentButtons .. "Button" .. (currentButtons[#currentButtons] + (offset or 0))
+end
+
 local module =
 {
 	name = "UIDropDownMenu",
-	frame = CreateFrame("Frame", nil, DropDownList1),
 	title = "Drop down menus",
+	frame = CreateFrame("Frame", nil, DropDownList1),
+	secureButtons =
+	{
+		bindingDoActionButton = function() return getName(0) end,
+	},
 }
 
 KeyboardUI:RegisterModule(module)
 
-local currentButtons = {}	-- n is the number of open drop down lists (ie, depth); tbl[n] is the button selected within it
-
-local function getName(offset)
-	offset = offset or 0
-	return "DropDownList" .. #currentButtons .. "Button" .. (currentButtons[#currentButtons] + offset)
-end
 
 local function getButton(offset)
 	return #currentButtons > 0 and _G[getName(offset)]
@@ -37,37 +41,6 @@ end
 
 local function getText()
 	return #currentButtons > 0 and _G["DropDownList" .. #currentButtons .. "Button" .. currentButtons[#currentButtons] .. "NormalText"]:GetText()
-end
-
-local function assertSecureKeybinds()
-	if module:hasFocus() and getButton() and not InCombatLockdown() then
-		SetOverrideBindingClick(module.frame, true, module:getOption("bindingDoActionButton"), getName(), "LeftButton")
-	end
-end
-
-local function removeSecureKeybinds()
-	if not InCombatLockdown() then
-		ClearOverrideBindings(module.frame)
-	end
-end
-
-module.frame:RegisterEvent("PLAYER_REGEN_DISABLED")
-module.frame:RegisterEvent("PLAYER_REGEN_ENABLED")
-
-module.frame:SetScript("OnEvent", function(self, event)
-	if event == "PLAYER_REGEN_DISABLED" then
-		removeSecureKeybinds()
-	elseif event == "PLAYER_REGEN_ENABLED" then
-		assertSecureKeybinds()
-	end
-end)
-
-function module:GainFocus()
-	assertSecureKeybinds()
-end
-
-function module:LoseFocus()
-	removeSecureKeybinds()
 end
 
 function module:NextEntry()
@@ -78,8 +51,7 @@ function module:NextEntry()
 			btn.Highlight:Hide()
 			nextBtn.Highlight:Show()
 			currentButtons[#currentButtons] = currentButtons[#currentButtons] + 1
-			removeSecureKeybinds()
-			assertSecureKeybinds()
+			module:updatePriorityKeybinds()
 		end
 		return getText()
 	end
@@ -93,8 +65,7 @@ function module:PrevEntry()
 			btn.Highlight:Hide()
 			prevBtn.Highlight:Show()
 			currentButtons[#currentButtons] = currentButtons[#currentButtons] - 1
-			removeSecureKeybinds()
-			assertSecureKeybinds()
+			module:updatePriorityKeybinds()
 		end
 		return getText()
 	end
@@ -141,22 +112,22 @@ function module:Actions()
 end
 
 function module:DoAction(index)
-	-- Deliberately nop() because of assertSecureKeybinds()
+	-- Deliberately nop(); replaced with secureButtons.bindingDoActionButton
 end
 
 DropDownList1:HookScript("OnShow", function()
 	currentButtons[1] = 1
 	getButton().Highlight:Show()
-	assertSecureKeybinds()
-	module:ttsInterrupt(getText(), KUI_QUICK, KUI_MF)
+	module:updatePriorityKeybinds()
+	module:ttsInterrupt("Dropdown" .. getText(), KUI_QUICK, KUI_MF)
 end)
 
 DropDownList1:HookScript("OnHide", function()
+	-- this might not even be necessary
 	if getButton() then
 		getButton().Highlight:Hide()
 	end
 	wipe(currentButtons)
-	removeSecureKeybinds()
 end)
 
 hooksecurefunc("UIDropDownMenuButton_OnClick", function(self)

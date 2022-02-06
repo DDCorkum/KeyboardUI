@@ -15,40 +15,30 @@ Refer to KeyboardUI.lua for full details
 
 local KeyboardUI = select(2, ...)
 
+local book, tab, slot, flyout, action = 0, 0, 0, 0, 0
+
 local module =
 {
 	name = "SpellBookFrame",
 	frame = CreateFrame("Frame", nil, SpellBookFrame),
 	title = SPELLBOOK .. " & " .. BINDING_HEADER_ACTIONBAR,
+	secureButtons =
+	{
+		bindingChangeTabButton = SpellBookProfessionFrame and function()
+			if book == 1 then
+				return "SpellBookFrameTabButton2"
+			elseif book == 2 and HasPetSpells() then
+				return "SpellBookFrameTabButton3"
+			else
+				return "SpellBookFrameTabButton1"
+			end
+		end or nil, -- Retail only
+		bindingNextGroupButton = function() return book == 1 and tab < GetNumSpellTabs() and "SpellBookSkillLineTab" .. (tab+1) end,
+		bindingPrevGroupButton = function() return book == 1 and tab > 1 and "SpellBookSkillLineTab" .. (tab-1) end,
+	},
 }
 
 KeyboardUI:RegisterModule(module)
-
-local book, tab, slot, flyout, action = 0, 0, 0, 0, 0
-
-local function assertSecureKeybinds()
-	if book == 1 then
-		if tab < GetNumSpellTabs() then
-			SetOverrideBindingClick(module.frame, true, module:getOption("bindingNextGroupButton"), "SpellBookSkillLineTab"..(tab+1), "LeftButton")
-		end
-		if tab > 1 then
-			SetOverrideBindingClick(module.frame, true, module:getOption("bindingPrevGroupButton"), "SpellBookSkillLineTab"..(tab-1), "LeftButton")
-		end
-	end
-	if SpellBookProfessionFrame then
-		if book == 1 then
-			SetOverrideBindingClick(module.frame, true, module:getOption("bindingChangeTabButton"), "SpellBookFrameTabButton2", "LeftButton")
-		elseif book == 2 and HasPetSpells() then
-			SetOverrideBindingClick(module.frame, true, module:getOption("bindingChangeTabButton"), "SpellBookFrameTabButton3", "LeftButton")
-		else
-			SetOverrideBindingClick(module.frame, true, module:getOption("bindingChangeTabButton"), "SpellBookFrameTabButton1", "LeftButton")
-		end
-	end
-end
-
-local function removeSecureKeybinds()
-	ClearOverrideBindings(module.frame)
-end
 
 local function petToSpellID(id)
 	return bit.band(id, 4294967295) -- 0xFFFFFF
@@ -223,10 +213,6 @@ local function hideAllGlows()
 			button.AbilityHighlight:Hide()
 		end
 	end
-end
-
-function module:ChangeTab()
-	-- taint; migrated to assertSecureKeybinds()
 end
 
 function module:NextGroup()
@@ -505,34 +491,34 @@ SpellBookSpellIconsFrame:Hide()
 SpellBookSpellIconsFrame:HookScript("OnShow", function(self)
 	if SpellBookFrame.bookType == BOOKTYPE_SPELL then
 		book, tab, slot, flyout =  1, SpellBookFrame.selectedSkillLine, 0, 0
-		removeSecureKeybinds()
-		assertSecureKeybinds()
+		module:updatePriorityKeybinds()
 		announce(self, SPELLBOOK)
 	else -- BOOKTYPE_PET
 		book, tab, slot, flyout = 3, 0, 0, 0
-		removeSecureKeybinds()
-		assertSecureKeybinds()
+		module:updatePriorityKeybinds()
 		announce(self, PET)
 	end
 end)
 
 SpellBookSpellIconsFrame:HookScript("OnHide", function(self)
-	removeSecureKeybinds()
+	if book == 1 then
+		book = nil
+		module:updatePriorityKeybinds()
+	end
 end)
 
 if SpellBookProfessionFrame then
+	-- Retail only
 	SpellBookProfessionFrame:Hide()
-	
 	SpellBookProfessionFrame:HookScript("OnShow", function(self)
 		book, tab, slot, flyout = 2, 0, 0, 0
-		removeSecureKeybinds()
-		assertSecureKeybinds()
+		module:updatePriorityKeybinds()
 		announce(self, TRADE_SKILLS)
 	end)
 end
 
 SpellBookFrame:HookScript("OnHide", function()
-	book, tab, slot, flyout = 0, 0, 0, 0
+	book, tab, slot, flyout, action = 0, 0, 0, 0, 0
 end)
 
 SpellBookNextPageButton:HookScript("OnClick", function()
@@ -598,13 +584,11 @@ hooksecurefunc("ToggleSpellBook", function(bookType)
 	if bookType == BOOKTYPE_SPELL and book ~= 1 then
 		hideGlow()
 		book, tab, slot, flyout = 1, SpellBookFrame.selectedSkillLine, 0, 0
-		removeSecureKeybinds()
-		assertSecureKeybinds()
+		module:updatePriorityKeybinds()
 	elseif bookType == BOOKTYPE_PET and book ~= 3 and HasPetSpells() then
 		hideGlow()
 		book, tab, slot, flyout = 3, 0, 0, 0
-		removeSecureKeybinds()
-		assertSecureKeybinds()	
+		module:updatePriorityKeybinds()
 	end
 	-- BOOKTYPE_PROFESSION is not actually necessary, because the profession frame is guaranteed to appear
 end)
@@ -612,8 +596,7 @@ end)
 hooksecurefunc ("SpellBookFrame_Update", function()
 	if book == 1 and tab ~= SpellBookFrame.selectedSkillLine then
 		tab, slot, flyout = SpellBookFrame.selectedSkillLine, 0, 0
-		removeSecureKeybinds()
-		assertSecureKeybinds()
+		module:updatePriorityKeybinds()
 		module:ttsYield(GetSpellTabInfo(tab) or "General")
 	end
 end)

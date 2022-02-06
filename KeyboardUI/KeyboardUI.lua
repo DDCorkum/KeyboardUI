@@ -19,6 +19,9 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+0.8 (2022-02-06) by Dahk Celes
+- Critical bug fix when closing windows
+
 0.7 (2022-02-04) by Dahk Celes
 - More TTS when hovering over the game world and UI
 - More control over TTS volume and rate
@@ -246,38 +249,67 @@ local events = {}					-- The event handlers for frame, sorted by event
 -------------------------
 -- Keybindings
 
-local function enableKeybindings()
-	if not InCombatLockdown() then
-		-- Core bindings
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingChangeTabButton, "KeyboardUIChangeTabButton", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextGroupButton, "KeyboardUINextGroupButton", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevGroupButton, "KeyboardUIPrevGroupButton", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextEntryButton, "KeyboardUINextEntryButton", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevEntryButton, "KeyboardUIPrevEntryButton", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingForwardButton, "KeyboardUIForwardButton", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingBackwardButton, "KeyboardUIBackwardButton", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoActionButton, "KeyboardUIDoActionButton", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingActionsButton, "KeyboardUIActionsButton", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction1Button, "KeyboardUIDoAction1Button", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction2Button, "KeyboardUIDoAction2Button", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction3Button, "KeyboardUIDoAction3Button", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction4Button, "KeyboardUIDoAction4Button", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction5Button, "KeyboardUIDoAction5Button", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction6Button, "KeyboardUIDoAction6Button", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction7Button, "KeyboardUIDoAction7Button", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction8Button, "KeyboardUIDoAction8Button", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction9Button, "KeyboardUIDoAction9Button", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction10Button, "KeyboardUIDoAction10Button", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction11Button, "KeyboardUIDoAction11Button", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction12Button, "KeyboardUIDoAction12Button", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadTitleButton, "KeyboardUIReadTitleButton", "LeftButton")
-		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadDescriptionButton, "KeyboardUIReadDescriptionButton", "LeftButton")
+local function enableOverrideKeybinds()
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingChangeTabButton, "KeyboardUIChangeTabButton", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextGroupButton, "KeyboardUINextGroupButton", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevGroupButton, "KeyboardUIPrevGroupButton", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextEntryButton, "KeyboardUINextEntryButton", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevEntryButton, "KeyboardUIPrevEntryButton", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingForwardButton, "KeyboardUIForwardButton", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingBackwardButton, "KeyboardUIBackwardButton", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoActionButton, "KeyboardUIDoActionButton", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingActionsButton, "KeyboardUIActionsButton", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction1Button, "KeyboardUIDoAction1Button", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction2Button, "KeyboardUIDoAction2Button", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction3Button, "KeyboardUIDoAction3Button", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction4Button, "KeyboardUIDoAction4Button", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction5Button, "KeyboardUIDoAction5Button", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction6Button, "KeyboardUIDoAction6Button", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction7Button, "KeyboardUIDoAction7Button", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction8Button, "KeyboardUIDoAction8Button", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction9Button, "KeyboardUIDoAction9Button", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction10Button, "KeyboardUIDoAction10Button", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction11Button, "KeyboardUIDoAction11Button", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction12Button, "KeyboardUIDoAction12Button", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadTitleButton, "KeyboardUIReadTitleButton", "LeftButton")
+	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadDescriptionButton, "KeyboardUIReadDescriptionButton", "LeftButton")
+end
+
+local function disableOverrideKeybinds()
+	ClearOverrideBindings(frame)
+end
+
+function lib:updatePriorityKeybinds()
+	if self:hasFocus() and not InCombatLockdown() then
+		ClearOverrideBindings(self.frame)
+		if self.secureButtons then
+			for option, button in pairs(self.secureButtons) do
+				option = self:getOption(option)
+				if type(button) == "function" then
+					button = button()
+				end
+				if option and button then
+					SetOverrideBindingClick(self.frame, true, option, type(button) == "string" and button or button:GetName())
+				end
+			end
+		end
+		if self.secureCommands then
+			for option, command in pairs(self.secureCommands) do
+				option = self:getOption(option)
+				if type(command) == "function" then			
+					command = command()
+				end
+				if option and command then
+					SetOverrideBindingClick(self.frame, true, option, command)
+				end
+			end
+		end
 	end
 end
 
-local function disableKeybindings()
+function lib:removePriorityKeybinds()
 	if not InCombatLockdown() then
-		ClearOverrideBindings(frame)
+		ClearOverrideBindings(self.frame)
 	end
 end
 
@@ -297,12 +329,18 @@ local function frameOnShow(frame)
 	frame.priority = frame.priority or stratas[frame:GetFrameStrata()] + frame:GetFrameLevel()
 	if #shownFrames == 0 then
 		shownFrames[1] = frame
-		enableKeybindings()
-		frame.module:GainFocus(frame)
+		if not InCombatLockdown() then
+			enableOverrideKeybinds()
+			frame.module:GainFocus(frame)
+		end
 	elseif frame.priority > shownFrames[#shownFrames].priority then
-		shownFrames[#shownFrames].module:LoseFocus(shownFrames[#shownFrames])
-		shownFrames[#shownFrames+1] = frame
-		frame.module:GainFocus(frame)
+		if InCombatLockdown() then
+			shownFrames[#shownFrames+1] = frame
+		else
+			shownFrames[#shownFrames].module:LoseFocus(shownFrames[#shownFrames])
+			shownFrames[#shownFrames+1] = frame
+			frame.module:GainFocus(frame)
+		end
 	else
 		local i = 1
 		while shownFrames[i] and shownFrames[i].priority < frame.priority do
@@ -313,16 +351,23 @@ local function frameOnShow(frame)
 end
 
 local function frameOnHide(frame)
-	if #shownFrames == 1 then
-		disableKeybindings()
-		shownFrames[1] = nil
+	if shownFrames[#shownFrames] == frame then
+		frame.module:LoseFocus()
+		frame.module:removePriorityKeybinds()
+		shownFrames[#shownFrames] = nil
 	else
 		for i=#shownFrames, 1, -1 do
 			if shownFrames[i] == frame then
 				tremove(shownFrames, i)
-				return
+				break
 			end
 		end
+	end
+	local newFrame = shownFrames[#shownFrames]
+	if newFrame then
+		newFrame.module:GainFocus()
+	else
+		disableOverrideKeybinds()
 	end
 end
 
@@ -351,6 +396,7 @@ function KeyboardUI:RegisterModule(module, optIndex)
 	
 	if module.frames then
 		for __, frame in pairs(module.frames) do
+			module.frame = module.frame or frame
 			frame.module = module
 			frame:HookScript("OnShow", frameOnShow)
 			frame:HookScript("OnHide", frameOnHide)
@@ -487,9 +533,11 @@ end)
 
 lib:onEvent("PLAYER_REGEN_DISABLED", function()
 	if #shownFrames > 0 then
-		disableKeybindings()
+		disableOverrideKeybinds()
+		shownFrames[#shownFrames].module:LoseFocus()
 	elseif event == "PLAYER_REGEN_ENABLED" and #shownFrames > 0 then
-		enableKeybindings()
+		enableOverrideKeybinds()
+		shownFrames[#shownFrames].module:GainFocus()
 	end
 end)
 
@@ -524,10 +572,13 @@ end
 
 function lib:GainFocus()
 	-- Fires when a module is now the target for keybindings.
+	self:updatePriorityKeybinds()
+	self:ttsYield(self.title or self.name, KUI_QUICK, KUI_MF)
 end
 
 function lib:LoseFocus()
 	-- Fires when a module is no longer the target for keybindings.
+	self:removePriorityKeybinds()
 end
 
 function lib:ChangeTab(...)
