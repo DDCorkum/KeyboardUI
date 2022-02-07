@@ -21,6 +21,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 0.8 (2022-02-06) by Dahk Celes
 - Critical bug fix when closing windows
+- Added system options
 
 0.7 (2022-02-04) by Dahk Celes
 - More TTS when hovering over the game world and UI
@@ -250,33 +251,37 @@ local events = {}					-- The event handlers for frame, sorted by event
 -- Keybindings
 
 local function enableOverrideKeybinds()
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingChangeTabButton, "KeyboardUIChangeTabButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextGroupButton, "KeyboardUINextGroupButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevGroupButton, "KeyboardUIPrevGroupButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextEntryButton, "KeyboardUINextEntryButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevEntryButton, "KeyboardUIPrevEntryButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingForwardButton, "KeyboardUIForwardButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingBackwardButton, "KeyboardUIBackwardButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoActionButton, "KeyboardUIDoActionButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingActionsButton, "KeyboardUIActionsButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction1Button, "KeyboardUIDoAction1Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction2Button, "KeyboardUIDoAction2Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction3Button, "KeyboardUIDoAction3Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction4Button, "KeyboardUIDoAction4Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction5Button, "KeyboardUIDoAction5Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction6Button, "KeyboardUIDoAction6Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction7Button, "KeyboardUIDoAction7Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction8Button, "KeyboardUIDoAction8Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction9Button, "KeyboardUIDoAction9Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction10Button, "KeyboardUIDoAction10Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction11Button, "KeyboardUIDoAction11Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction12Button, "KeyboardUIDoAction12Button", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadTitleButton, "KeyboardUIReadTitleButton", "LeftButton")
-	SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadDescriptionButton, "KeyboardUIReadDescriptionButton", "LeftButton")
+	if not InCombatLockdown() then
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingChangeTabButton, "KeyboardUIChangeTabButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextGroupButton, "KeyboardUINextGroupButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevGroupButton, "KeyboardUIPrevGroupButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextEntryButton, "KeyboardUINextEntryButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevEntryButton, "KeyboardUIPrevEntryButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingForwardButton, "KeyboardUIForwardButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingBackwardButton, "KeyboardUIBackwardButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoActionButton, "KeyboardUIDoActionButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingActionsButton, "KeyboardUIActionsButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction1Button, "KeyboardUIDoAction1Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction2Button, "KeyboardUIDoAction2Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction3Button, "KeyboardUIDoAction3Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction4Button, "KeyboardUIDoAction4Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction5Button, "KeyboardUIDoAction5Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction6Button, "KeyboardUIDoAction6Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction7Button, "KeyboardUIDoAction7Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction8Button, "KeyboardUIDoAction8Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction9Button, "KeyboardUIDoAction9Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction10Button, "KeyboardUIDoAction10Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction11Button, "KeyboardUIDoAction11Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoAction12Button, "KeyboardUIDoAction12Button", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadTitleButton, "KeyboardUIReadTitleButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingReadDescriptionButton, "KeyboardUIReadDescriptionButton", "LeftButton")
+	end
 end
 
 local function disableOverrideKeybinds()
-	ClearOverrideBindings(frame)
+	if not InCombatLockdown() then
+		ClearOverrideBindings(frame)
+	end
 end
 
 function lib:updatePriorityKeybinds()
@@ -492,7 +497,7 @@ local function configureVoices()
 			end
 		end
 	end
-	KUI_VOICE = opt2 or opt1 or KUI_VOICE_ENGLISH or voices[1] and voice[1].voiceID or nil
+	KUI_VOICE = opt1 or opt2 or KUI_VOICE_ENGLISH or voices[1] and voice[1].voiceID or nil
 	KUI_VOICE_ENGLISH = KUI_VOICE_ENGLISH or KUI_VOICE
 
 end
@@ -687,6 +692,7 @@ ttsFrame:SetScript("OnEvent", function(__, event)
 end)
 
 ttsFrame:SetScript("OnUpdate", function()
+	ttsFrame.isBlocking = nil
 	if #ttsFrame > 0 then
 		local tbl = tremove(ttsFrame,1)
 		ttsFrame.current = tbl[2]
@@ -697,7 +703,7 @@ end)
 -- say something when previous messages have finished
 function lib:ttsQueue(text, rate, dynamics, useEnglish)
 	local volume = self:getOption("volumeMax") * (1 - (dynamics or KUI_MF) * self:getOption("volumeVariance") / 50)
-	if KUI_VOICE and volume > 0  and text and text ~= "" and self:getOption("enabled") then
+	if KUI_VOICE and volume > 0  and text and text ~= "" and self:getOption("enabled") and not ttsFrame.isBlocking then
 		text = tostring(text)
 		rate = self:getOption("speedMax") + (rate or KUI_NORMAL) * self:getOption("speedVariance")
 		if text:sub(1,1) == "<" and not text:sub(1,7) == "<speak>" then
@@ -708,9 +714,22 @@ function lib:ttsQueue(text, rate, dynamics, useEnglish)
 end
 
 function lib:ttsYield(...)
-	if #ttsFrame == 0 and ttsFrame:IsShown() then
+	if #ttsFrame == 0 and ttsFrame:IsShown() and not ttsFrame.isBlocking then
 		self:ttsQueue(...)
 		return true
+	end
+end
+
+function lib:ttsBlock()
+	if not ttsFrame.isBlocking and #ttsFrame == 0 and ttsFrame:IsShown() then
+		ttsFrame.isBlocking = self
+		return true
+	end
+end
+
+function lib:ttsUnblock()
+	if ttsFrame.isBlocking == self then
+		ttsFrame.isBlocking = nil
 	end
 end
 
@@ -1184,7 +1203,7 @@ end
 -------------------------
 -- Options Menu
 
-local panel = CreateFrame("Frame")
+local panel = CreateFrame("Frame")  foo = panel
 panel.name = "KeyboardUI"
 InterfaceOptions_AddCategory(panel)
 panel:Hide()	-- important to trigger scrollFrame OnShow()

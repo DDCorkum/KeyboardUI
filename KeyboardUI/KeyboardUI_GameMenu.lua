@@ -34,14 +34,15 @@ do
 	}
 
 	KeyboardUI:RegisterModule(module)
-	
-	for __, frame in ipairs({GameMenuFrame:GetChildren()}) do
-		if frame:IsObjectType("Button") and frame:IsShown() then
-			tinsert(buttons, frame)
-		end
-	end
-		
+				
 	function module:NextEntry()
+		if position == 0 then
+			for __, frame in ipairs({GameMenuFrame:GetChildren()}) do
+				if frame:IsObjectType("Button") and frame:IsShown() then
+					tinsert(buttons, frame)
+				end
+			end		
+		end
 		if position < #buttons then
 			position = position + 1
 		end
@@ -58,7 +59,7 @@ do
 	end
 	
 	function module:RefreshEntry()
-		return position > 0
+		return position > 0 and buttons[position]:GetText()
 	end
 	
 	function module:Forward()
@@ -83,6 +84,9 @@ end -- end of GameMenu
 
 do
 
+	local entry, entries, labels = 0, {}, {}
+	local currentPanel = nil
+
 	local module =
 	{
 		name = "InterfaceOptions",
@@ -91,101 +95,80 @@ do
 		{
 			CreateFrame("Frame", nil, InterfaceOptionsFrameCategories),
 			CreateFrame("Frame", nil, InterfaceOptionsFrameAddOns),
+			CreateFrame("Frame", nil, VideoOptionsFrameCategoryFrame),
 		},
 	}
 	
 	KeyboardUI:RegisterModule(module)
 	
-	local entry, entries, labels = 0, {}, {}
-	
 	function module:ChangeTab()
+		module:ttsBlock()
 		if module.frames[1]:IsVisible() then
 			InterfaceOptionsFrameTab2:Click()
-		else
-			InterfaceOptionsFrameTab1:Click()
+			module:ttsUnblock()
+			return ADDONS .. " " .. SETTINGS
+		elseif module.frames[2]:IsVisible() then
+			GameMenuButtonOptions:Click()
+			module:ttsUnblock()
+			return SYSTEMOPTIONS_MENU .. " " .. SETTINGS
+		elseif module.frames[3]:IsVisible() then
+			GameMenuButtonUIOptions:Click()
+			if module.frames[2]:IsVisible() then
+				InterfaceOptionsFrameTab1:Click()
+			end
+			module:ttsUnblock()
+			return GAME .. " " .. SETTINGS
 		end
-	end
-	
-	function module:GainFocus()
-		entry = 0
-	end
-	
-	function module:LoseFocus()
-		-- nop()
 	end
 	
 	function module:NextGroup()
-		if module.frames[1]:IsVisible() then
-			local i = 1
-			local button = _G["InterfaceOptionsFrameCategoriesButton"..i]
-			while button and button:IsShown() do
-				if button.highlight:IsShown() and button.highlight:GetVertexColor() > 0.9 then
-					local next = _G["InterfaceOptionsFrameCategoriesButton"..i+1]
-					if next and next:IsShown() then
-						next:Click()
-						return next.text:GetText()
-					end
-					return
+		local parentName = module.frames[1]:IsVisible() and module.frames[1]:GetParent():GetName()
+			or module.frames[2]:IsVisible() and module.frames[2]:GetParent():GetName()
+			or module.frames[3]:IsVisible() and module.frames[3]:GetParent():GetName()
+		local i = 1
+		local button = _G[parentName.."Button"..i]
+		while button and button:IsShown() do
+			if button.highlight:IsShown() and button.highlight:GetVertexColor() > 0.9 then
+				local toggle = _G[parentName.."Button"..i.."Toggle"]
+				if toggle and toggle:IsShown() and _G[parentName.."Button"..i.."ToggleNormalTexture"]:GetTexture() == 130838 then
+					toggle:Click()
 				end
-				i = i + 1
-				button = _G["InterfaceOptionsFrameCategoriesButton"..i]
-			end
-			InterfaceOptionsFrameCategoriesButton1:Click()
-			return InterfaceOptionsFrameCategoriesButton1.text:GetText()
-		else
-			local i = 1
-			local button = _G["InterfaceOptionsFrameAddOnsButton"..i]
-			while button and button:IsShown() do
-				if button.highlight:IsShown() and button.highlight:GetVertexColor() > 0.9 then
-					local next, toggle = _G["InterfaceOptionsFrameAddOnsButton"..i+1], _G["InterfaceOptionsFrameAddOnsButton"..i.."Toggle"]
-					if toggle and toggle:IsShown() and toggle:GetNormalTexture():GetTexture() == 130838 then
-						toggle:Click()
-					end
-					if next and next:IsShown() then
-						next:Click()
-						return next.text:GetText()
-					end
-					return
+				local next = _G[parentName.."Button"..i+1]
+				if next and next:IsShown() then
+					next:Click()
+					return next.element.parent and (next.text:GetText() .. " within " .. next.element.parent) or next.text:GetText()
 				end
-				i = i + 1
-				button = _G["InterfaceOptionsFrameAddOnsButton"..i]
+				return
 			end
-			InterfaceOptionsFrameAddOnsButton1:Click()
-			return InterfaceOptionsFrameAddOnsButton1.text:GetText()
+			i = i + 1
+			button = _G[parentName.."Button"..i]
 		end
+		_G[parentName.."Button1"]:Click()
+		return _G[parentName.."Button1"].text:GetText()
 	end
 	
 	function module:PrevGroup()
-		if module.frames[1]:IsVisible() then
-			local i = 2
-			local button = _G["InterfaceOptionsFrameCategoriesButton"..i]
-			while button and button:IsShown() do
-				if button.highlight:IsShown() and button.highlight:GetVertexColor() > 0.9 then
-					local prev = _G["InterfaceOptionsFrameCategoriesButton"..i-1]
-					prev:Click()
-					return prev.text:GetText()
-				end
-				i = i + 1
-				button = _G["InterfaceOptionsFrameCategoriesButton"..i]
+		local parentName = module.frames[1]:IsVisible() and module.frames[1]:GetParent():GetName()
+			or module.frames[2]:IsVisible() and module.frames[2]:GetParent():GetName()
+			or module.frames[3]:IsVisible() and module.frames[3]:GetParent():GetName()
+		local i = 2
+		local button = _G[parentName.."Button"..i]
+		while button and button:IsShown() do
+			if button.highlight:IsShown() and button.highlight:GetVertexColor() > 0.9 then
+				local prev = _G[parentName.."Button"..i-1]
+				prev:Click()
+				return prev.element.parent and (prev.text:GetText() .. " within " .. prev.element.parent) or prev.text:GetText()
 			end
-		else
-			local i = 2
-			local button = _G["InterfaceOptionsFrameAddOnsButton"..i]
-			while button and button:IsShown() do
-				if button.highlight:IsShown() and button.highlight:GetVertexColor() > 0.9 then
-					local prev = _G["InterfaceOptionsFrameAddOnsButton"..i-1]
-						prev:Click()
-					return prev.text:GetText()
-				end
-				i = i + 1
-				button = _G["InterfaceOptionsFrameAddOnsButton"..i]
-			end
+			i = i + 1
+			button = _G[parentName.."Button"..i]
 		end
+		_G[parentName.."Button1"]:Click()
+		return _G[parentName.."Button1"].text:GetText()	
 	end
-	
+		
 	local function parseFrame(frame)
 		for __, frame in ipairs({frame:GetChildren()}) do
-			if frame:IsObjectType("CheckButton") or frame:IsObjectType("Slider") or type(frame.initialize)=="function" then
+			if frame:IsObjectType("CheckButton") then
 				local text
 				if frame:GetName() and _G[frame:GetName().."Label"] and _G[frame:GetName().."Label"]:GetText() then
 					if text then
@@ -202,19 +185,44 @@ do
 					text = (text and (text .. "; ") or "") .. frame.Text:GetText()
 				end
 				if frame:GetName() then
-					if _G[frame:GetName().."Text"] and not text then
+					if _G[frame:GetName().."Text"] and _G[frame:GetName().."Text"]:IsVisible() then
 						text = _G[frame:GetName().."Text"]:GetText()
 					end
-					if _G[frame:GetName().."Low"] and _G[frame:GetName().."High"] and _G[frame:GetName().."Low"]:GetText() and _G[frame:GetName().."High"]:GetText() then
-						if text then
-							text = text .. "; from " .. _G[frame:GetName().."Low"]:GetText() .. " to " .. _G[frame:GetName().."High"]:GetText()
+					if _G[frame:GetName().."Low"] and _G[frame:GetName().."High"] and _G[frame:GetName().."Low"]:IsVisible() then
+						local low, high = _G[frame:GetName().."Low"]:GetText(), _G[frame:GetName().."High"]:GetText()
+						if text and low and high and text ~= "" and low ~= "" and high ~= "" then
+							text = text .. "; from " .. low .. " to " .. high
 						end
 					end
 				end
-				if text then
+				if text and text ~= "" then
 					tinsert(entries, frame)
 					tinsert(labels, text)
 				end
+			elseif frame:IsObjectType("Slider") then
+				local label = frame:GetName() and _G[frame:GetName().."Label"] and _G[frame:GetName().."Label"]:IsVisible() and _G[frame:GetName().."Label"]:GetText() or frame.text and frame.text:GetText()
+				local top, low, high
+				if frame:GetName() then
+					top, low, high = _G[frame:GetName().."Text"], _G[frame:GetName().."Low"], _G[frame:GetName().."High"]
+				else
+					top, low, high = frame.Text, frame.Low, frame.High
+				end
+				top, low, high = top and top:GetText(), low and low:GetText(), high and high:GetText()
+				top, low, high = top ~= "" and top, low ~= "" and low, high ~= "" and high
+				if label and top and low and high then
+					tinsert(entries, frame)
+					tinsert(labels, label .. "; from " .. low .. " to " .. high)
+				elseif top or label then
+					tinsert(entries, frame)
+					tinsert(labels, (top or label) .. " slider")
+				end
+			elseif type(frame.initialize) == "function" and frame:GetObjectType() == "Frame" then
+				tinsert(entries, frame)
+				if frame:GetName() and _G[frame:GetName().."Label"] and _G[frame:GetName().."Label"]:GetText() then
+					tinsert(labels, _G[frame:GetName().."Label"]:GetText() .. " dropdown")
+				else
+					tinsert(labels, "Dropdown")
+				end	
 			elseif frame:IsObjectType("ScrollFrame") or frame:GetObjectType() == "Frame" then
 				parseFrame(frame)
 			end
@@ -241,7 +249,11 @@ do
 	
 	function module:NextEntry()
 		if entry ==  0 then
-			generateLists(InterfaceOptionsFramePanelContainer.displayedPanel)
+			if InterfaceOptionsFrame:IsShown() then
+				generateLists(InterfaceOptionsFramePanelContainer.displayedPanel)
+			else
+				generateLists(VideoOptionsFramePanelContainer.displayedPanel)
+			end
 			if #entries == 0 then
 				return "Sorry, Keyboard UI cannot interpret the controls for this addon."
 			end
@@ -356,7 +368,15 @@ do
 	end
 	
 	hooksecurefunc("InterfaceOptionsList_DisplayPanel", function(panel)
-		entry = 0
+		if panel ~= currentPanel then
+			entry = 0
+		end
+	end)
+	
+	hooksecurefunc("OptionsList_DisplayPanel", function(panel)
+		if panel ~= currentPanel then
+			entry = 0
+		end
 	end)
 
 end
