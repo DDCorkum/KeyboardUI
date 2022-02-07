@@ -540,7 +540,11 @@ lib:onEvent("PLAYER_REGEN_DISABLED", function()
 	if #shownFrames > 0 then
 		disableOverrideKeybinds()
 		shownFrames[#shownFrames].module:LoseFocus()
-	elseif event == "PLAYER_REGEN_ENABLED" and #shownFrames > 0 then
+	end
+end)
+
+lib:onEvent("PLAYER_REGEN_ENABLED", function()
+	if #shownFrames > 0 then
 		enableOverrideKeybinds()
 		shownFrames[#shownFrames].module:GainFocus()
 	end
