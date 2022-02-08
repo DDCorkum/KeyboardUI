@@ -19,9 +19,9 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
-0.8 (2022-02-06) by Dahk Celes
-- Critical bug fix when closing windows
-- Added system options
+0.8 (2022-02-07) by Dahk Celes
+- Extended keyboard navigation to the system options
+- Various bug fixes including the quest log and closing windows
 
 0.7 (2022-02-04) by Dahk Celes
 - More TTS when hovering over the game world and UI
