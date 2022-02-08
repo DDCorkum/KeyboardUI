@@ -15,12 +15,17 @@ Refer to KeyboardUI.lua for full details
 
 local KeyboardUI = select(2, ...)
 
-local module = {name = "QuestLog", title = QUEST_LOG, frame = CreateFrame("Frame", nil, QuestMapFrame)}
-
-KeyboardUI:RegisterModule(module)
-
 local quests = {}
 local group, entry, questID, action = 0, 0, 0, 0
+
+local module =
+{
+	name = "QuestLog",
+	title = QUEST_LOG,
+	frame = CreateFrame("Frame", nil, QuestMapFrame)
+}
+
+KeyboardUI:RegisterModule(module)
 
 local highlightTexture = module.frame:CreateTexture("BACKGROUND", nil)
 highlightTexture:SetColorTexture(unpack(KUI_HIGHLIGHT_COLOR))
@@ -146,7 +151,11 @@ function module:NextEntry()
 		QuestMapFrame.DetailsFrame.BackButton:Click()
 		action = 0
 	end
-	for i=entry+1, #quests-1 do
+	if #quests == 0 then
+		group, entry, questID, action = 0, 0, 0, 0
+		return "The quest log is empty"
+	end
+	for i=entry+1, #quests do
 		if quests[i].isHeader then
 			for j=i+1, #quests do
 				if quests[j].isHeader then
@@ -177,14 +186,17 @@ function module:NextEntry()
 			end
 		end
 	end
-	group, entry, questID, action = 0, 0, 0, 0
-	return
+
 end
 
 function module:PrevEntry()
 	if QuestMapFrame.DetailsFrame:IsShown() then
 		QuestMapFrame.DetailsFrame.BackButton:Click()
 		action = 0
+	end
+	if #quests == 0 then
+		group, entry, questID, action = 0, 0, 0, 0
+		return "The quest log is empty"
 	end
 	for i=entry-1, 1, -1 do
 		if quests[i].isHeader then
@@ -198,32 +210,28 @@ function module:PrevEntry()
 				end
 			end
 		elseif not (quests[i].isBounty or quests[i].isHidden) then
-			ExpandQuestHeader(group)
-			entry, questID, action = i, quests[i].questID, 0
-			highlightEntry()
-			return quests[entry].title
+			for j=i-1, 1, -1 do
+				if quests[j].isHeader then
+					group, entry, questID, action = j, i, quests[i].questID, 0
+					ExpandQuestHeader(group)
+					highlightEntry()
+					return quests[entry].title					
+				end
+			end
 		end
 	end
-	for i=#quests, entry, -1 do
-		if quests[i].isHeader then
-			for j=i+1, #quests do
+	for i=#quests, entry+1, -1 do
+		if not (quests[i].isBounty or quests[i].isHidden or quests[i].isHeader) then
+			for j=i-1, 1, -1 do
 				if quests[j].isHeader then
-					break
-				elseif not (quests[j].isBounty or quests[j].isHidden) then
-					group, entry, questID, action = i, i, 0, 0
+					group, entry, questID, action = j, i, 0, 0
+					ExpandQuestHeader(group)
 					highlightGroup()
 					return quests[entry].title
 				end
 			end
-		elseif not (quests[i].isBounty or quests[i].isHidden) then
-			ExpandQuestHeader(group)
-			group, entry, questID, action = i, i, quests[i].questID, 0
-			highlightEntry()
-			return quests[entry].title
 		end
 	end
-	group, entry, questID, action = 0, 0, 0, 0
-	return
 end
 
 function module:RefreshEntry()

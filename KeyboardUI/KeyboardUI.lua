@@ -19,6 +19,10 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+0.8 (2022-02-07) by Dahk Celes
+- Extended keyboard navigation to the system options
+- Various bug fixes including the quest log and closing windows
+
 0.7 (2022-02-04) by Dahk Celes
 - More TTS when hovering over the game world and UI
 - More control over TTS volume and rate
@@ -246,9 +250,8 @@ local events = {}					-- The event handlers for frame, sorted by event
 -------------------------
 -- Keybindings
 
-local function enableKeybindings()
+local function enableOverrideKeybinds()
 	if not InCombatLockdown() then
-		-- Core bindings
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingChangeTabButton, "KeyboardUIChangeTabButton", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextGroupButton, "KeyboardUINextGroupButton", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevGroupButton, "KeyboardUIPrevGroupButton", "LeftButton")
@@ -275,9 +278,43 @@ local function enableKeybindings()
 	end
 end
 
-local function disableKeybindings()
+local function disableOverrideKeybinds()
 	if not InCombatLockdown() then
 		ClearOverrideBindings(frame)
+	end
+end
+
+function lib:updatePriorityKeybinds()
+	if self:hasFocus() and not InCombatLockdown() then
+		ClearOverrideBindings(self.frame)
+		if self.secureButtons then
+			for option, button in pairs(self.secureButtons) do
+				option = self:getOption(option)
+				if type(button) == "function" then
+					button = button()
+				end
+				if option and button then
+					SetOverrideBindingClick(self.frame, true, option, type(button) == "string" and button or button:GetName())
+				end
+			end
+		end
+		if self.secureCommands then
+			for option, command in pairs(self.secureCommands) do
+				option = self:getOption(option)
+				if type(command) == "function" then			
+					command = command()
+				end
+				if option and command then
+					SetOverrideBindingClick(self.frame, true, option, command)
+				end
+			end
+		end
+	end
+end
+
+function lib:removePriorityKeybinds()
+	if not InCombatLockdown() then
+		ClearOverrideBindings(self.frame)
 	end
 end
 
@@ -297,12 +334,18 @@ local function frameOnShow(frame)
 	frame.priority = frame.priority or stratas[frame:GetFrameStrata()] + frame:GetFrameLevel()
 	if #shownFrames == 0 then
 		shownFrames[1] = frame
-		enableKeybindings()
-		frame.module:GainFocus(frame)
+		if not InCombatLockdown() then
+			enableOverrideKeybinds()
+			frame.module:GainFocus(frame)
+		end
 	elseif frame.priority > shownFrames[#shownFrames].priority then
-		shownFrames[#shownFrames].module:LoseFocus(shownFrames[#shownFrames])
-		shownFrames[#shownFrames+1] = frame
-		frame.module:GainFocus(frame)
+		if InCombatLockdown() then
+			shownFrames[#shownFrames+1] = frame
+		else
+			shownFrames[#shownFrames].module:LoseFocus(shownFrames[#shownFrames])
+			shownFrames[#shownFrames+1] = frame
+			frame.module:GainFocus(frame)
+		end
 	else
 		local i = 1
 		while shownFrames[i] and shownFrames[i].priority < frame.priority do
@@ -313,16 +356,23 @@ local function frameOnShow(frame)
 end
 
 local function frameOnHide(frame)
-	if #shownFrames == 1 then
-		disableKeybindings()
-		shownFrames[1] = nil
+	if shownFrames[#shownFrames] == frame then
+		frame.module:LoseFocus()
+		frame.module:removePriorityKeybinds()
+		shownFrames[#shownFrames] = nil
 	else
 		for i=#shownFrames, 1, -1 do
 			if shownFrames[i] == frame then
 				tremove(shownFrames, i)
-				return
+				break
 			end
 		end
+	end
+	local newFrame = shownFrames[#shownFrames]
+	if newFrame then
+		newFrame.module:GainFocus()
+	else
+		disableOverrideKeybinds()
 	end
 end
 
@@ -351,6 +401,7 @@ function KeyboardUI:RegisterModule(module, optIndex)
 	
 	if module.frames then
 		for __, frame in pairs(module.frames) do
+			module.frame = module.frame or frame
 			frame.module = module
 			frame:HookScript("OnShow", frameOnShow)
 			frame:HookScript("OnHide", frameOnHide)
@@ -446,7 +497,7 @@ local function configureVoices()
 			end
 		end
 	end
-	KUI_VOICE = opt2 or opt1 or KUI_VOICE_ENGLISH or voices[1] and voice[1].voiceID or nil
+	KUI_VOICE = opt1 or opt2 or KUI_VOICE_ENGLISH or voices[1] and voice[1].voiceID or nil
 	KUI_VOICE_ENGLISH = KUI_VOICE_ENGLISH or KUI_VOICE
 
 end
@@ -487,9 +538,15 @@ end)
 
 lib:onEvent("PLAYER_REGEN_DISABLED", function()
 	if #shownFrames > 0 then
-		disableKeybindings()
-	elseif event == "PLAYER_REGEN_ENABLED" and #shownFrames > 0 then
-		enableKeybindings()
+		disableOverrideKeybinds()
+		shownFrames[#shownFrames].module:LoseFocus()
+	end
+end)
+
+lib:onEvent("PLAYER_REGEN_ENABLED", function()
+	if #shownFrames > 0 then
+		enableOverrideKeybinds()
+		shownFrames[#shownFrames].module:GainFocus()
 	end
 end)
 
@@ -524,10 +581,13 @@ end
 
 function lib:GainFocus()
 	-- Fires when a module is now the target for keybindings.
+	self:updatePriorityKeybinds()
+	self:ttsYield(self.title or self.name, KUI_QUICK, KUI_MF)
 end
 
 function lib:LoseFocus()
 	-- Fires when a module is no longer the target for keybindings.
+	self:removePriorityKeybinds()
 end
 
 function lib:ChangeTab(...)
@@ -636,6 +696,7 @@ ttsFrame:SetScript("OnEvent", function(__, event)
 end)
 
 ttsFrame:SetScript("OnUpdate", function()
+	ttsFrame.isBlocking = nil
 	if #ttsFrame > 0 then
 		local tbl = tremove(ttsFrame,1)
 		ttsFrame.current = tbl[2]
@@ -646,7 +707,7 @@ end)
 -- say something when previous messages have finished
 function lib:ttsQueue(text, rate, dynamics, useEnglish)
 	local volume = self:getOption("volumeMax") * (1 - (dynamics or KUI_MF) * self:getOption("volumeVariance") / 50)
-	if KUI_VOICE and volume > 0  and text and text ~= "" and self:getOption("enabled") then
+	if KUI_VOICE and volume > 0  and text and text ~= "" and self:getOption("enabled") and not ttsFrame.isBlocking then
 		text = tostring(text)
 		rate = self:getOption("speedMax") + (rate or KUI_NORMAL) * self:getOption("speedVariance")
 		if text:sub(1,1) == "<" and not text:sub(1,7) == "<speak>" then
@@ -657,9 +718,22 @@ function lib:ttsQueue(text, rate, dynamics, useEnglish)
 end
 
 function lib:ttsYield(...)
-	if #ttsFrame == 0 and ttsFrame:IsShown() then
+	if #ttsFrame == 0 and ttsFrame:IsShown() and not ttsFrame.isBlocking then
 		self:ttsQueue(...)
 		return true
+	end
+end
+
+function lib:ttsBlock()
+	if not ttsFrame.isBlocking and #ttsFrame == 0 and ttsFrame:IsShown() then
+		ttsFrame.isBlocking = self
+		return true
+	end
+end
+
+function lib:ttsUnblock()
+	if ttsFrame.isBlocking == self then
+		ttsFrame.isBlocking = nil
 	end
 end
 
@@ -1133,7 +1207,7 @@ end
 -------------------------
 -- Options Menu
 
-local panel = CreateFrame("Frame")
+local panel = CreateFrame("Frame")  foo = panel
 panel.name = "KeyboardUI"
 InterfaceOptions_AddCategory(panel)
 panel:Hide()	-- important to trigger scrollFrame OnShow()
