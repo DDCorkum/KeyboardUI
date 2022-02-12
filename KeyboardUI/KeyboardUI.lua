@@ -19,6 +19,10 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+0.9 (2022-02-11) by Dahk Celes
+- Rudimentary keyboard navigation for the backpack and bags
+- Rudimentary support for the retail new player experience
+
 0.8 (2022-02-07) by Dahk Celes
 - Extended keyboard navigation to the system options
 - Various bug fixes including the quest log and closing windows
@@ -55,6 +59,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 KeyboardUI = {}
 local KeyboardUI = select(2, ...)
+local L = KeyboardUI.text or {}	-- see localization.lua
 --setmetatable(_G["KeyboardUI"], {__index=KeyboardUI})		-- Uncommenting out this line would expose the internal API for other AddOns to integrate with KeyboardUI.
 															-- I havn't yet decided yet to do this, but I am designing KeyboardUI with this future possibility in mind.
 -------------------------
@@ -304,8 +309,9 @@ function lib:updatePriorityKeybinds()
 				if type(command) == "function" then			
 					command = command()
 				end
+				print(option, command)
 				if option and command then
-					SetOverrideBindingClick(self.frame, true, option, command)
+					SetOverrideBinding(self.frame, true, option, command)
 				end
 			end
 		end
@@ -415,7 +421,14 @@ function KeyboardUI:RegisterModule(module, optIndex)
 		hooksecurefunc(module.frame, "SetFrameStrata", updateFrameStrataAndLevel)
 		hooksecurefunc(module.frame, "SetFrameLevel", updateFrameStrataAndLevel)
 	end
-	
+end
+
+function KeyboardUI:CreatePseudoModule()
+	return {
+		ttsQueue = lib.ttsQueue,
+		ttsInterrupt = lib.ttsInterrupt,
+		
+	}
 end
 
 function lib:hasFocus(frame)
@@ -504,6 +517,7 @@ end
 
 lib:onEvent("ADDON_LOADED", function(arg1)
 	if arg1 == "KeyboardUI" then
+		configureVoices()
 		options = KeyboardUIOptions
 		for __, module in ipairs(modules) do	-- order matters.  The global one must be first.
 			configureOptions(module.name)
@@ -517,23 +531,13 @@ lib:onEvent("ADDON_LOADED", function(arg1)
 	elseif frame.numLoaded then
 		for i = frame.numLoaded + 1, #modules do
 			configureOptions(modules[i].name)
-			module.frame:SetShown(KeyboardUIOptions[module.name]["enabled"])
-			module:onOptionChanged("enabled", function(value) module.frame:SetShown(value) end)
+			if not KeyboardUIOptions[modules[i].name]["enabled"] then
+				modules[i].frame:Hide()
+			end
+			modules[i]:onOptionChanged("enabled", function(value) modules[i].frame:SetShown(value) end)
 			modules[i]:Init()
 		end
 	end
-end)
-
-lib:onEvent("PLAYER_LOGIN", function()
-	C_Timer.After(5, function()
-		configureVoices()
-		if KeyboardUIOptions.global.notFirstTime then
-			lib:ttsQueue("For help with Keyboard UI, type: slash, K, U, I.", KUI_NORMAL, KUI_PP, true)
-		else
-			KeyboardUIOptions.global.notFirstTime = true
-			lib:ttsInterrupt([=[<speak>Welcome to Keyboard UI. <silence msec="500"/> For help, type: slash Keyboard UI, all as one word.  Alternatively, type: slash, K, U, I.</speak>]=], KUI_CASUAL, KUI_P, true)
-		end
-	end)
 end)
 
 lib:onEvent("PLAYER_REGEN_DISABLED", function()
@@ -995,9 +999,19 @@ end
 
 local scanningTooltip = CreateFrame("GameTooltip", "KeyboardUIScanningTooltip", nil, "SharedTooltipTemplate")
 scanningTooltip:SetOwner(frame, "ANCHOR_NONE")
-local scanningTooltipLines = 0
+local scanningTooltipLines = 1
 
-function lib:getScanningTooltip(minLines)
+scanningTooltip:SetScript("OnShow", function()
+	local line = _G["KeyboardUIScanningTooltipTextLeft"..scanningTooltipLines]
+	while line do
+		scanningTooltip[scanningTooltipLines*2 - 1] = line
+		scanningTooltip[scanningTooltipLines*2] = _G["KeyboardUIScanningTooltipTextRight"..scanningTooltipLines]
+		scanningTooltipLines = scanningTooltipLines + 1
+		line = _G["KeyboardUIScanningTooltipTextLeft"..scanningTooltipLines]
+	end
+end)
+
+function lib:getScanningTooltip(minLines)	-- minLines to be removed; still here for backwards compatibility
 	scanningTooltip:ClearLines()
 	if minLines and minLines > scanningTooltipLines then
 		for i=1, scanningTooltipLines do
@@ -1011,6 +1025,17 @@ function lib:getScanningTooltip(minLines)
 		scanningTooltip:ClearLines()
 	end
 	return scanningTooltip
+end
+
+function lib:readScanningTooltip()
+	local text = {}
+	for i=1, #scanningTooltip do
+		local line = scanningTooltip[i]:GetText()
+		if line and line ~= "" then
+			tinsert(text, line)
+		end
+	end
+	return table.concat(text, ". ")
 end
 
 -------------------------
@@ -1207,7 +1232,7 @@ end
 -------------------------
 -- Options Menu
 
-local panel = CreateFrame("Frame")  foo = panel
+local panel = CreateFrame("Frame")
 panel.name = "KeyboardUI"
 InterfaceOptions_AddCategory(panel)
 panel:Hide()	-- important to trigger scrollFrame OnShow()
@@ -1529,3 +1554,45 @@ function SlashCmdList.KEYBOARDUI(msg)
 end
 SLASH_KEYBOARDUI1 = "/keyboardui"
 SLASH_KEYBOARDUI2 = "/kui"
+
+
+-------------------------
+-- Tutorial
+
+local tutorials = 
+{
+	function() return 0, UnitLevel("player") == 1 and TUTORIAL_TITLE42 end,
+	function() return 0, UnitLevel("player") == 1 and ("%s%s%s, %s, %s, %s"):format(BINDING_HEADER_MOVEMENT, CHAT_HEADER_SUFFIX, GetBindingKey("MOVEFORWARD") or "", GetBindingKey("MOVEBACKWARD") or "", GetBindingKey("TURNLEFT") or "", GetBindingKey("TURNRIGHT") or "") end,
+	function() return 10, UnitLevel("player") == 1 or UnitLevel("player") == 2 and TutorialQueue.currentTutorial.spellToAdd and not (HasAction(2) or SpellBookFrame:IsShown()) and (L["PRESS_TO"]):format(GetBindingKey("TOGGLESPELLBOOK") or "", NPEV2_SPELLBOOK_ADD_SPELL:format(GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd))) end,
+}
+
+local nextTutorial = 1
+
+local function playTutorial()
+	if TutorialQueue.currentTutorial and tutorials[nextTutorial] then
+		local advance, text = tutorials[nextTutorial]()
+		if type(text) == "string" and lib:ttsYield(text, KUI_SLOW, KUI_MP) then
+			if advance == 0 then
+				nextTutorial = nextTutorial + 1
+			end
+			C_Timer.After(advance, playTutorial)
+		elseif text then
+			C_Timer.After(2, playTutorial)
+		else
+			nextTutorial = nextTutorial + 1
+			playTutorial()
+		end
+	elseif tutorials[nextTutorial] then
+		C_Timer.After(2, playTutorial)
+	end
+end
+
+lib:onEvent("PLAYER_LOGIN", function()
+	C_Timer.After(10, function()
+		if NPE_TutorialKeyboardMouseFrame_Frame then
+			playTutorial()			
+		elseif UnitLevel("player") < 30 then
+			lib:ttsQueue("For help with Keyboard UI, type: slash, K, U, I.", KUI_NORMAL, KUI_PP, true)
+		end
+	end)
+end)

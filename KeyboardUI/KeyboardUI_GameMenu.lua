@@ -188,12 +188,6 @@ do
 					if _G[frame:GetName().."Text"] and _G[frame:GetName().."Text"]:IsVisible() then
 						text = _G[frame:GetName().."Text"]:GetText()
 					end
-					if _G[frame:GetName().."Low"] and _G[frame:GetName().."High"] and _G[frame:GetName().."Low"]:IsVisible() then
-						local low, high = _G[frame:GetName().."Low"]:GetText(), _G[frame:GetName().."High"]:GetText()
-						if text and low and high and text ~= "" and low ~= "" and high ~= "" then
-							text = text .. "; from " .. low .. " to " .. high
-						end
-					end
 				end
 				if text and text ~= "" then
 					tinsert(entries, frame)
@@ -211,7 +205,7 @@ do
 				top, low, high = top ~= "" and top, low ~= "" and low, high ~= "" and high
 				if label and top and low and high then
 					tinsert(entries, frame)
-					tinsert(labels, label .. "; from " .. low .. " to " .. high)
+					tinsert(labels, label .. "; " .. L[FROM_TO]:format(low, high))
 				elseif top or label then
 					tinsert(entries, frame)
 					tinsert(labels, (top or label) .. " slider")

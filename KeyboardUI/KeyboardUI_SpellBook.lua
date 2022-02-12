@@ -480,9 +480,15 @@ local function announce(self, book)
 		if firstTime then
 			firstTime = false
 			module:ttsInterrupt(book)
-			module:ttsQueue(([=[Use %s and %s and other keybinds to navigate the spell book.  Use %s and %s to choose an action bar slot.  %s puts the spell in the action bar.]=]):format(module:getOption("bindingNextEntryButton"), module:getOption("bindingPrevEntryButton"), module:getOption("bindingForwardButton"), module:getOption("bindingBackwardButton"), module:getOption("bindingDoActionButton")), KUI_NORMAL, KUI_MP, true)
+			module:ttsQueue(([=[Use %s and %s to navigate the spell book, and use %s and %s to choose an action bar slot.  %s puts the chosen spell in the chosen action bar slot.]=]):format(module:getOption("bindingNextEntryButton"), module:getOption("bindingPrevEntryButton"), module:getOption("bindingForwardButton"), module:getOption("bindingBackwardButton"), module:getOption("bindingDoActionButton")), KUI_NORMAL, KUI_MP, true)
+			if TutorialQueue and TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd then
+				module:ttsQueue(NPEV2_SPELLBOOKREMINDER:format(GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd)), KUI_NORMAL, KUI_MP)
+			end
 		else
 			module:ttsYield(book)
+			if TutorialQueue and TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd then
+				module:ttsQueue(NPEV2_SPELLBOOKREMINDER:format(GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd)), KUI_NORMAL, KUI_MP)
+			end
 		end
 	end
 end
