@@ -14,6 +14,7 @@ Refer to KeyboardUI.lua for full details
 
 
 local KeyboardUI = select(2, ...)
+local L = KeyboardUI.text
 
 do
 
@@ -205,7 +206,7 @@ do
 				top, low, high = top ~= "" and top, low ~= "" and low, high ~= "" and high
 				if label and top and low and high then
 					tinsert(entries, frame)
-					tinsert(labels, label .. "; " .. L[FROM_TO]:format(low, high))
+					tinsert(labels, label .. " " .. L["FROM_TO"]:format(low, high))
 				elseif top or label then
 					tinsert(entries, frame)
 					tinsert(labels, (top or label) .. " slider")
@@ -280,7 +281,9 @@ do
 			end
 			entry = entry - 1
 		end
-		return entry > 0
+		if entry > 0 then
+			return labels[entry] .. "; " .. getStatus(entries[entry]), (entries[entry].tooltipText or entries[entry].description or ""):format(getStatus(entries[entry]))
+		end
 	end
 
 	function module:Forward()
@@ -343,8 +346,7 @@ do
 			InterfaceOptionsFrameCancel:Click()
 		elseif index == 7 then
 			InterfaceOptionsFrameDefaults:Click()
-		end
-		if entry > 0 then
+		elseif entry > 0 then
 			local frame = entries[entry]
 			if frame:IsObjectType("CheckButton") then
 				frame:Click()

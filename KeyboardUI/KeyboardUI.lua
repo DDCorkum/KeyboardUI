@@ -19,7 +19,7 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
-0.9 (2022-02-11) by Dahk Celes
+0.9 (2022-02-12) by Dahk Celes
 - Rudimentary keyboard navigation for the backpack and bags
 - Rudimentary support for the retail new player experience
 
@@ -309,7 +309,6 @@ function lib:updatePriorityKeybinds()
 				if type(command) == "function" then			
 					command = command()
 				end
-				print(option, command)
 				if option and command then
 					SetOverrideBinding(self.frame, true, option, command)
 				end
@@ -342,15 +341,18 @@ local function frameOnShow(frame)
 		shownFrames[1] = frame
 		if not InCombatLockdown() then
 			enableOverrideKeybinds()
-			frame.module:GainFocus(frame)
+			frame.module:updatePriorityKeybinds()
+			frame.module:GainFocus()
 		end
 	elseif frame.priority > shownFrames[#shownFrames].priority then
 		if InCombatLockdown() then
 			shownFrames[#shownFrames+1] = frame
 		else
 			shownFrames[#shownFrames].module:LoseFocus(shownFrames[#shownFrames])
+			shownFrames[#shownFrames].module:removePriorityKeybinds()
 			shownFrames[#shownFrames+1] = frame
-			frame.module:GainFocus(frame)
+			frame.module:GainFocus()
+			frame.module:updatePriorityKeybinds()
 		end
 	else
 		local i = 1
@@ -377,6 +379,7 @@ local function frameOnHide(frame)
 	local newFrame = shownFrames[#shownFrames]
 	if newFrame then
 		newFrame.module:GainFocus()
+		newFrame.module:updatePriorityKeybinds()
 	else
 		disableOverrideKeybinds()
 	end
@@ -421,14 +424,6 @@ function KeyboardUI:RegisterModule(module, optIndex)
 		hooksecurefunc(module.frame, "SetFrameStrata", updateFrameStrataAndLevel)
 		hooksecurefunc(module.frame, "SetFrameLevel", updateFrameStrataAndLevel)
 	end
-end
-
-function KeyboardUI:CreatePseudoModule()
-	return {
-		ttsQueue = lib.ttsQueue,
-		ttsInterrupt = lib.ttsInterrupt,
-		
-	}
 end
 
 function lib:hasFocus(frame)
@@ -544,6 +539,7 @@ lib:onEvent("PLAYER_REGEN_DISABLED", function()
 	if #shownFrames > 0 then
 		disableOverrideKeybinds()
 		shownFrames[#shownFrames].module:LoseFocus()
+		shownFrames[#shownFrames].module:removePriorityKeybinds()
 	end
 end)
 
@@ -551,6 +547,7 @@ lib:onEvent("PLAYER_REGEN_ENABLED", function()
 	if #shownFrames > 0 then
 		enableOverrideKeybinds()
 		shownFrames[#shownFrames].module:GainFocus()
+		shownFrames[#shownFrames].module:updatePriorityKeybinds()
 	end
 end)
 
@@ -584,14 +581,12 @@ function lib:Init()
 end
 
 function lib:GainFocus()
-	-- Fires when a module is now the target for keybindings.
-	self:updatePriorityKeybinds()
+	-- Fires when a module is now the target for keybindings.  self:updatePriorityKeybinds() is called right after.
 	self:ttsYield(self.title or self.name, KUI_QUICK, KUI_MF)
 end
 
 function lib:LoseFocus()
-	-- Fires when a module is no longer the target for keybindings.
-	self:removePriorityKeybinds()
+	-- Fires when a module is no longer the target for keybindings.  self:removePriorityKeybinds() is called right before.
 end
 
 function lib:ChangeTab(...)
@@ -1011,19 +1006,8 @@ scanningTooltip:SetScript("OnShow", function()
 	end
 end)
 
-function lib:getScanningTooltip(minLines)	-- minLines to be removed; still here for backwards compatibility
+function lib:getScanningTooltip()
 	scanningTooltip:ClearLines()
-	if minLines and minLines > scanningTooltipLines then
-		for i=1, scanningTooltipLines do
-			scanningTooltip:AddLine(" ")
-		end
-		for i=scanningTooltipLines+1, minLines do
-			scanningTooltip:AddLine(" ")
-			scanningTooltip["left"..i] = _G["KeyboardUIScanningTooltipTextLeft"..i]
-			scanningTooltip["right"..i] = _G["KeyboardUIScanningTooltipTextRight"..i]
-		end
-		scanningTooltip:ClearLines()
-	end
 	return scanningTooltip
 end
 
@@ -1563,7 +1547,7 @@ local tutorials =
 {
 	function() return 0, UnitLevel("player") == 1 and TUTORIAL_TITLE42 end,
 	function() return 0, UnitLevel("player") == 1 and ("%s%s%s, %s, %s, %s"):format(BINDING_HEADER_MOVEMENT, CHAT_HEADER_SUFFIX, GetBindingKey("MOVEFORWARD") or "", GetBindingKey("MOVEBACKWARD") or "", GetBindingKey("TURNLEFT") or "", GetBindingKey("TURNRIGHT") or "") end,
-	function() return 10, UnitLevel("player") == 1 or UnitLevel("player") == 2 and TutorialQueue.currentTutorial.spellToAdd and not (HasAction(2) or SpellBookFrame:IsShown()) and (L["PRESS_TO"]):format(GetBindingKey("TOGGLESPELLBOOK") or "", NPEV2_SPELLBOOK_ADD_SPELL:format(GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd))) end,
+	function() return 10, UnitLevel("player") == 1 or UnitLevel("player") == 2 and TutorialQueue.currentTutorial.spellToAdd and not SpellBookFrame:IsShown() and not HasAction(2) and (L["PRESS_TO"]):format(GetBindingKey("TOGGLESPELLBOOK") or "", NPEV2_SPELLBOOK_ADD_SPELL:format(GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd))) end,
 }
 
 local nextTutorial = 1

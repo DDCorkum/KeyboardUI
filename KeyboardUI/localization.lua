@@ -29,6 +29,7 @@ L["PRESS_TO"] = "Appuyez sur %1$s pour %2$s"
 elseif language == "es" then
 
 L["FROM_TO"] = "de %1$s a %2$s"
+L["PRESS_TO"] = "Presiona %s para habrir %s"
 
 
 end

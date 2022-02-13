@@ -14,6 +14,5 @@ KeyboardUI_UIDropDownMenu.lua
 
 # Frames
 KeyboardUI_GameMenu.lua
-KeyboardUI_SpellBook.lua
+KeyboardUI_Actions.lua
 KeyboardUI_QuestLog.lua
-KeyboardUI_ContainerFrame.lua
