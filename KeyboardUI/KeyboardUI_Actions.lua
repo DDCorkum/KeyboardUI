@@ -219,10 +219,6 @@ do
 		moduleUsingActionbAr = nil
 	end
 
-	local function petToSpellID(id)
-		return bit.band(id, 4294967295) -- 0xFFFFFF
-	end
-
 	local function scanTooltip(id, bookType)
 		module:getScanningTooltip():SetSpellBookItem(id, bookType)
 		return module:readScanningTooltip()
@@ -241,11 +237,12 @@ do
 			if spellType == "SPELL" then
 				return longDesc and scanTooltip(slotWithOffset, bookType) or GetSpellInfo(id)
 			elseif spellType == "FUTURESPELL" then
-				return longDesc and scanTooltip(slotWithOffset, bookType) or GetSpellInfo(id)
+				local name, __, __, __, minLevel = GetSpellInfo(id)
+				return longDesc and scanTooltip(slotWithOffset, bookType) or name .. " (" .. UNKNOWN .. ")."
 			elseif spellType == "FLYOUT" then
 				return longDesc and scanTooltip(slotWithOffset, bookType) or "Collection of " .. GetFlyoutInfo(id) .. " abilities."
 			elseif spellType == "PETACTION" then
-				return longDesc and scanTooltip(slotWithOffset, bookType) or GetSpellInfo(petToSpellID(id))
+				return longDesc and scanTooltip(slotWithOffset, bookType) or GetSpellBookItemName(slotWithOffset, bookType)
 			end
 		else
 			local spellID = GetFlyoutSlotInfo(id, flyout)
@@ -735,21 +732,86 @@ do
 		moduleUsingActionbAr = nil
 	end
 
+	local function getRedTooltipText()
+		local tooltip = module:getScanningTooltip()
+		tooltip:SetBagItem(bagID, bagSlot)
+		for __, fontString in ipairs(tooltip) do
+			local r, g, b = fontString:GetTextColor()
+			local text = fontString:GetText()
+			if text and text ~= "" and g < 0.2 and b < 0.2 and r > 0.9 then
+				return text
+			end
+		end
+	end
+	
+	invTypeToSlot =
+	{
+		INVTYPE_HEAD = INVSLOT_HEAD,
+		INVTYPE_NECK = INVSLOT_NECK,
+		INVTYPE_SHOULDER = INVSLOT_SHOULDER,
+		INVTYPE_BODY = INVSLOT_BODY,
+		INVTYPE_CHEST = INVSLOT_CHEST,
+		INVTYPE_WAIST = INVSLOT_WAIST,
+		INVTYPE_LEGS = INVSLOT_LEGS,
+		INVTYPE_FEET = INVSLOT_FEET,
+		INVTYPE_WRIST = INVSLOT_WRIST,
+		INVTYPE_HAND = INVSLOT_HAND,
+		INVTYPE_FINGER = INVSLOT_FINGER1,
+		INVTYPE_TRINKET = INVSLOT_TRINKET1,
+		INVTYPE_WEAPON = INVSLOT_MAINHAND,
+		INVTYPE_SHIELD = INVSLOT_OFFHAND,
+		INVTYPE_RANGED = INVSLOT_MAINHAND, -- INVSLOT_RANGED for classic era???
+		INVTYPE_CLOAK = INVSLOT_BACK,
+		INVTYPE_2HWEAPON = INVSLOT_MAINHAND,
+		--INVTYPE_BAG
+		INVTYPE_TABARD = INVSLOT_TABARD,
+		INVTYPE_ROBE = INVSLOT_CHEST,
+		INVTYPE_WEAPONMAINHAND = INVSLOT_MAINHAND,
+		INVTYPE_WEAPONOFFHAND = INVSLOT_OFFHAND,
+		INVTYPE_HOLDABLE = INVSLOT_OFFHAND,
+		INVTYPE_AMMO = INVSLOT_AMMO,
+		INVTYPE_THROWN = INVSLOT_MAINHAND,
+		INVTYPE_RANGEDRIGHT = INVSLOT_MAINHAND,
+		--INVTYPE_QUIVER,
+		--INVTYPE_RELIC,
+	}
+	
+	invTypeToSlot2 =
+	{
+		INVTYPE_FINGER = INVSLOT_FINGER2,
+		INVTYPE_TRINKET = INVSLOT_TRINKET2,
+		INVTYPE_WEAPON = INVSLOT_OFFHAND,
+	}
+	
+	
 	local function getCountAndName()
 		local __, itemCount, __, __, __, __, __, __, __, itemID = GetContainerItemInfo(bagID, bagSlot)
 		if itemID then
-			local itemName, __, __, __, itemMinLevel, __, __, __, itemEquipLoc = GetItemInfo(itemID)
+			local itemName, __, __, __, itemMinLevel, itemType, __, __, itemEquipLoc = GetItemInfo(itemID)
 			itemLoc:SetBagAndSlot(bagID, bagSlot)
 			local itemQuality = C_Item.GetItemQuality(itemLoc)
-			local itemLevel = C_Item.GetCurrentItemLevel(itemLoc)		
-			if itemEquipLoc ~= "" and UnitLevel("player") >= itemMinLevel then
-				local itemSlot = itemEquipLoc:gsub("TYPE", "bagSlot")
-				if not _G[itemSlot] then
-					itemSlot = itemSlot.."1"
-				end
-				local oldItemID = GetInventoryItemID("player", _G[itemSlot])
-				if oldItemID then
-					local oldName, __, oldQuality, oldLevel = GetItemInfo(oldItemID)
+			local itemLevel = C_Item.GetCurrentItemLevel(itemLoc)
+			local redText = getRedTooltipText()
+			if itemEquipLoc ~= "" and not redText then
+				local itemSlot1, itemSlot2 = invTypeToSlot[itemEquipLoc], (itemEquipLoc ~= "INVTYPE_WEAPON" or CanDualWield()) and invTypeToSlot2[itemEquipLoc] or nil
+				local oldItemID1, oldItemID2 = itemSlot1 and GetInventoryItemID("player", itemSlot1), itemSlot2 and GetInventoryItemID("player", itemSlot2)
+				if oldItemID1 and oldItemID2 then
+					local oldName1, __, oldQuality1, oldLevel1 = GetItemInfo(oldItemID1)
+					local oldName2, __, oldQuality2, oldLevel2 = GetItemInfo(oldItemID2)
+					return ("%s (%s, %s). %s (%s, %s) %s %s (%s, %s)"):format(
+						itemName,
+						_G["ITEM_QUALITY"..itemQuality.."_DESC"],
+						CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(itemLevel),
+						REPLACES_SPELL:format(oldName1),
+						_G["ITEM_QUALITY"..oldQuality1.."_DESC"],
+						CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(oldLevel1),
+						itemType == 4 and QUEST_LOGIC_OR or QUEST_LOGIC_AND,
+						oldName2,
+						_G["ITEM_QUALITY"..oldQuality2.."_DESC"],
+						CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(oldLevel2)
+					)				
+				elseif oldItemID1 or oldItemID2 then
+					local oldName, __, oldQuality, oldLevel = GetItemInfo(oldItemID1 or oldItemID2)
 					return ("%s (%s, %s). %s (%s, %s)"):format(
 						itemName,
 						_G["ITEM_QUALITY"..itemQuality.."_DESC"],
@@ -767,6 +829,8 @@ do
 				end
 			elseif itemCount > 1 then
 				return ITEM_QUANTITY_TEMPLATE:format(itemCount, itemName)
+			elseif redText then
+				return itemName .. ". " .. MOUNT_JOURNAL_FILTER_UNUSABLE .. CHAT_HEADER_SUFFIX .. redText
 			else
 				return itemName
 			end
@@ -812,8 +876,8 @@ do
 			bagSlot = bagSlot + 1
 			useActionSlots = false
 			self:updatePriorityKeybinds()
-			local __, itemCount, __, __, __, __, __, __, __, itemID = GetContainerItemInfo(bagID, bagSlot)
 			return bagSlot .. "; " .. (getCountAndName() or EMPTY)
+			
 		end
 	end
 
@@ -888,18 +952,24 @@ do
 			return
 		end
 		
+		local redText = getRedTooltipText()
+		if redText then
+			PlayVocalErrorSoundID(51)
+			return ("<speak><silence msec=\"2000\" />%s</speak>"):format(ITEM_REQ_SKILL:format(redText))
+		end
+		
 		local itemName, __, __, __, itemMinLevel, itemType, itemSubType, __, itemEquipLoc = GetItemInfo(itemID)
-		itemLoc:SetBagAndSlot(bagID, bagSlot)
-		local itemQuality = C_Item.GetItemQuality(itemLoc)
-		local itemLevel = C_Item.GetCurrentItemLevel(itemLoc)	
-		if itemEquipLoc and itemEquipLoc ~= "" and UnitLevel("player") >= itemMinLevel then
-			local itemSlot = itemEquipLoc:gsub("TYPE", "bagSlot")
-			if not _G[itemSlot] then
-				itemSlot = itemSlot.."1"
-			end
-			local oldItemID = GetInventoryItemID("player", _G[itemSlot])
-			if oldItemID then
-				itemLoc:SetEquipmentSlot(_G[itemSlot])
+		if itemEquipLoc and itemEquipLoc ~= "" then
+			itemLoc:SetBagAndSlot(bagID, bagSlot)
+			local itemQuality = C_Item.GetItemQuality(itemLoc)
+			local itemLevel = C_Item.GetCurrentItemLevel(itemLoc)	
+			
+			local itemSlot1, itemSlot2 = invTypeToSlot[itemEquipLoc], (itemEquipLoc ~= "INVTYPE_WEAPON" or CanDualWield()) and invTypeToSlot2[itemEquipLoc] or nil
+			local oldItemID1, oldItemID2 = itemSlot1 and GetInventoryItemID("player", itemSlot1), itemSlot2 and GetInventoryItemID("player", itemSlot2)
+			print(itemEquipLoc, itemSlot1, itemSlot2)
+			if oldItemID1 then
+				-- oldItemID2 NYI
+				itemLoc:SetEquipmentSlot(itemSlot1)
 				local oldName = C_Item.GetItemName(itemLoc)
 				local oldQuality = C_Item.GetItemQuality(itemLoc)
 				local oldLevel = C_Item.GetCurrentItemLevel(itemLoc)

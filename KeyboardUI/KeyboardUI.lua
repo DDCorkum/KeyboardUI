@@ -19,7 +19,7 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
-0.9 (2022-02-12) by Dahk Celes
+0.9 (2022-02-14) by Dahk Celes
 - Rudimentary keyboard navigation for the backpack and bags
 - Rudimentary support for the retail new player experience
 
@@ -341,8 +341,8 @@ local function frameOnShow(frame)
 		shownFrames[1] = frame
 		if not InCombatLockdown() then
 			enableOverrideKeybinds()
-			frame.module:updatePriorityKeybinds()
 			frame.module:GainFocus()
+			frame.module:updatePriorityKeybinds()
 		end
 	elseif frame.priority > shownFrames[#shownFrames].priority then
 		if InCombatLockdown() then
@@ -581,12 +581,12 @@ function lib:Init()
 end
 
 function lib:GainFocus()
-	-- Fires when a module is now the target for keybindings.  self:updatePriorityKeybinds() is called right after.
+	-- Fires when a module is now the target for keybindings.  Followed by self:updatePriorityKeybinds().
 	self:ttsYield(self.title or self.name, KUI_QUICK, KUI_MF)
 end
 
 function lib:LoseFocus()
-	-- Fires when a module is no longer the target for keybindings.  self:removePriorityKeybinds() is called right before.
+	-- Fires when a module is no longer the target for keybindings.  Followed by self:removePriorityKeybinds().
 end
 
 function lib:ChangeTab(...)
@@ -780,7 +780,7 @@ end
 -- Keybindings continued
 
 local function getCurrentModule()
-	return shownFrames[#shownFrames].module
+	return shownFrames[#shownFrames] and shownFrames[#shownFrames].module
 end
 
 CreateFrame("Button", "KeyboardUIChangeTabButton"):SetScript("OnClick", function(__, button, down)
@@ -1021,6 +1021,7 @@ function lib:readScanningTooltip()
 	end
 	return table.concat(text, ". ")
 end
+
 
 -------------------------
 -- Global mouse integration
