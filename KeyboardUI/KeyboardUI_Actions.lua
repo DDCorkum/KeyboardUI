@@ -966,7 +966,6 @@ do
 			
 			local itemSlot1, itemSlot2 = invTypeToSlot[itemEquipLoc], (itemEquipLoc ~= "INVTYPE_WEAPON" or CanDualWield()) and invTypeToSlot2[itemEquipLoc] or nil
 			local oldItemID1, oldItemID2 = itemSlot1 and GetInventoryItemID("player", itemSlot1), itemSlot2 and GetInventoryItemID("player", itemSlot2)
-			print(itemEquipLoc, itemSlot1, itemSlot2)
 			if oldItemID1 then
 				-- oldItemID2 NYI
 				itemLoc:SetEquipmentSlot(itemSlot1)
