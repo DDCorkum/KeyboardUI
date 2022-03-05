@@ -17,6 +17,7 @@ KeyboardUI_Actions.lua - Includes modules which must share access to the action 
 
 
 local KeyboardUI = select(2, ...)
+local L = KeyboardUI.text
 
 local action = 0								-- used by SpellBookFrame and ContainerFrame modules to place abilities and consumables on the action bar
 local bagID, bagSlot = BACKPACK_CONTAINER, 0	-- used by ContainerFrame and MerchantFrame modules to interact with the player inventory
@@ -172,6 +173,29 @@ do
 	local book, tab, slot, flyout = 0, 0, 0, 0
 	
 	local useActionSlots = false
+
+	local positions = {[0] = SPELLS_PER_PAGE}		-- 1, 3, 5, 7, 9, 11, 2, 4, 6, 8, 10, 12... but the last one is in position 0 because the math is modulo 12.
+	for i=1, SPELLS_PER_PAGE-1, 2 do
+		tinsert(positions, i)
+	end
+	for i=2, SPELLS_PER_PAGE-2, 2 do
+		tinsert(positions, i)
+	end
+
+	local function getPosition()
+		return positions[slot % SPELLS_PER_PAGE]
+	end
+
+	-- bookType, offset, numSpells = getPositionInBook()
+	local function getPositionInBook()
+		if book == 1 then
+			return BOOKTYPE_SPELL, select(3, GetSpellTabInfo(tab))
+		elseif book == 2 then
+			return BOOKTYPE_SPELL, select(3, GetSpellTabInfo(tab))	-- does not return BOOKTYPE_PROFESSION even though it could
+		elseif book == 3 then
+			return BOOKTYPE_PET, 0, HasPetSpells()
+		end
+	end
 	
 	local module =
 	{
@@ -191,18 +215,41 @@ do
 			end or nil, -- Retail only
 			bindingNextGroupButton = function() return book == 1 and tab < GetNumSpellTabs() and "SpellBookSkillLineTab" .. (tab+1) end,
 			bindingPrevGroupButton = function() return book == 1 and tab > 1 and "SpellBookSkillLineTab" .. (tab-1) end,
+			bindingNextEntryButton = function()
+				if slot > 0 then
+					local bookType, offset = getPositionInBook()
+					if GetSpellBookItemInfo(slot + offset, bookType) == "FLYOUT" and flyout == 0 then
+						return "SpellButton" .. getPosition()
+					elseif getPosition() == SPELLS_PER_PAGE then
+						if flyout > 0 then
+							local btn = _G["SpellFlyoutButton"..(flyout+1)]
+							if not btn or not btn:IsShown() then
+								return "SpellBookNextPageButton"
+							end
+						else
+							return "SpellBookNextPageButton"
+						end
+					end
+				end
+			end,
+			bindingPrevEntryButton = function() return flyout == 1 and "SpellButton"..getPosition() or flyout == 0 and getPosition() == 1 and "SpellBookPrevPageButton" end,
 		},
 		secureCommands =
 		{
 			bindingDoActionButton = function()
 				if not useActionSlots then
+					if flyout > 0 then
+						return "CLICK SpellFlyoutButton" .. flyout .. ":LeftButton"
+					end
 					local slotWithOffset = book == 3 and slot or (slot + select(3, GetSpellTabInfo(tab)))
 					local bookType = book == 3 and BOOKTYPE_PET or BOOKTYPE_SPELL
 					local spellType, id = GetSpellBookItemInfo(slotWithOffset, bookType)
 					if spellType == "SPELL" then
 						return "SPELL " .. GetSpellInfo(id)
-					elseif spellType == "FLYOUT" and flyout > 0 then
-						return "SPELL ".. GetSpellInfo(GetFlyoutSlotInfo(id, flyout))
+					elseif spellType == "FLYOUT" then
+						return "CLICK SpellButton"..getPosition()
+					elseif spellType == "PETACTION" then
+						return "CLICK SpellButton"..getPosition()..":LeftButton"
 					end
 				end
 			end,
@@ -211,7 +258,9 @@ do
 
 	KeyboardUI:RegisterModule(module)
 
+	local parentGainFocus = module.GainFocus
 	function module:GainFocus()
+		parentGainFocus(self)
 		moduleUsingActionBar = self
 	end
 	
@@ -249,18 +298,6 @@ do
 			return longDesc and scanTooltipByID(spellID) or GetSpellInfo(spellID)
 		end
 
-	end
-
-	local positions = {[0] = SPELLS_PER_PAGE}		-- 1, 3, 5, 7, 9, 11, 2, 4, 6, 8, 10, 12... but the last one is in position 0 because the math is modulo 12.
-	for i=1, SPELLS_PER_PAGE-1, 2 do
-		tinsert(positions, i)
-	end
-	for i=2, SPELLS_PER_PAGE-2, 2 do
-		tinsert(positions, i)
-	end
-
-	local function getPosition(offset)
-		return offset and positions[(slot + offset) % SPELLS_PER_PAGE] or positions[slot % SPELLS_PER_PAGE]
 	end
 
 	local professionButtons =
@@ -315,7 +352,7 @@ do
 				_G["SpellButton"..i].AbilityHighlight:Hide()
 			end
 		end
-		if SpellFlyout:IsShown() then
+		if SpellFlyout and SpellFlyout:IsShown() then
 			local i = 1
 			while _G["SpellFlyoutButton"..i] do
 				if _G["SpellFlyoutButton"..i].AbilityHighlight then
@@ -377,54 +414,26 @@ do
 				hideGlow()
 				slot, useActionSlots = slot + 1, false
 				showGlow()
-				useActionSlots = false
 				self:updatePriorityKeybinds()
 				return getEntryText()
 			else
 				return module:NextGroup()
 			end	
+		elseif flyout > 0 and _G["SpellFlyoutButton"..(flyout+1)] and _G["SpellFlyoutButton"..(flyout+1)]:IsShown() then
+			hideGlow()
+			flyout, useActionSlots = flyout + 1, false
+			showGlow()
+			self:updatePriorityKeybinds()
 		else
-			local offset, numSpells, bookType
-			if book == 1 then
-				bookType = BOOKTYPE_SPELL
-				__, __, offset, numSpells = GetSpellTabInfo(tab)
-			else
-				bookType = BOOKTYPE_PET
-				offset, numSpells = 0, HasPetSpells()
-			end
-			local slotType, id = GetSpellBookItemInfo(slot + offset, bookType)
-			if slotType == "FLYOUT" then
-				if not SpellFlyout:IsVisible() then
-					_G["SpellButton"..getPosition()]:Click()
-				end
-				local __, __, flyoutNumSlots = GetFlyoutInfo(id)
-				while flyout < flyoutNumSlots do
-					hideGlow()
-					flyout, useActionSlots = flyout + 1, false
-					useActionSlots = false
-					self:updatePriorityKeybinds()
-					local __, __, isKnown = GetFlyoutSlotInfo(id, flyout)
-					if isKnown then
-						showGlow()
-						return getEntryText()
-					end
-				end
-			end
+			__, __, numSpells = getPositionInBook()
 			if slot < numSpells then
+				if SpellFlyout then
+					SpellFlyout:Hide()
+				end
 				hideGlow()
 				slot, flyout, useActionSlots = slot + 1, 0, false
-				useActionSlots = false
-				self:updatePriorityKeybinds()
-				if slot > SpellBook_GetCurrentPage() * SPELLS_PER_PAGE then
-					ignorePageButtons = true
-					SpellBookNextPageButton:Click()
-					ignorePageButtons = false
-				end
-				local slotType, id = GetSpellBookItemInfo(slot + select(3, GetSpellTabInfo(tab)), book == 3 and BOOKTYPE_PET or BOOKTYPE_SPELL)
-				if slotType == "FLYOUT" then
-					_G["SpellButton"..getPosition()]:Click()
-				end
 				showGlow()
+				self:updatePriorityKeybinds()
 				return getEntryText()
 			end
 		end
@@ -436,51 +445,22 @@ do
 				hideGlow()
 				slot, useActionSlots = slot - 1, false
 				showGlow()
-				useActionSlots = false
 				self:updatePriorityKeybinds()
 				return getEntryText()
 			else
 				return module:PrevGroup()
 			end	
-		else
-			if flyout > 0 then
-				hideGlow()
-				flyout, useActionSlots = flyout - 1, false
-				showGlow()
-				useActionSlots = false
-				self:updatePriorityKeybinds()
-				return getEntryText()
-			elseif slot > 1 then
-				hideGlow()
-				slot, useActionSlots = slot - 1, useActionSlots
-				if slot <= (SpellBook_GetCurrentPage() - 1) * SPELLS_PER_PAGE then
-					ignorePageButtons = true
-					SpellBookPrevPageButton:Click()
-					ignorePageButtons = false
-				end
-				local slotType, id = GetSpellBookItemInfo(slot + select(3, GetSpellTabInfo(tab)), book == 3 and BOOKTYPE_PET or BOOKTYPE_SPELL)
-				if slotType == "FLYOUT" then
-					local __, __, flyoutNumSlots = GetFlyoutInfo(id)
-					if not SpellFlyout:IsShown() then
-						_G["SpellButton"..getPosition()]:Click()
-					end
-					flyout = flyoutNumSlots
-					while flyout > 0 do
-						__, __,  isKnown = GetFlyoutSlotInfo(id, flyout)
-						if isKnown then
-							break;
-						else
-							flyout, useActionSlots = flyout - 1, false
-							useActionSlots = false
-							self:updatePriorityKeybinds()
-						end
-					end
-				else
-					flyout = 0
-				end
-				showGlow()
-				return getEntryText()
-			end
+		end
+		if flyout > 1 then
+			hideGlow()
+			flyout, useActionSlots = flyout - 1, false
+			showGlow()
+			module:updatePriorityKeybinds()
+		elseif slot > 1 then
+			hideGlow()
+			slot, useActionSlots = slot - 1, false
+			showGlow()
+			self:updatePriorityKeybinds()
 		end
 	end
 
@@ -564,17 +544,24 @@ do
 				firstTime = false
 				module:ttsInterrupt(book)
 				module:ttsQueue(([=[Use %s and %s to choose a spell, and use %s and %s to choose an action bar slot.  %s puts the chosen spell in the chosen action bar slot.]=]):format(module:getOption("bindingNextEntryButton"), module:getOption("bindingPrevEntryButton"), module:getOption("bindingForwardButton"), module:getOption("bindingBackwardButton"), module:getOption("bindingDoActionButton")), KUI_NORMAL, KUI_MP, true)
-				if TutorialQueue and TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd then
-					module:ttsQueue(NPEV2_SPELLBOOKREMINDER:format(GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd)), KUI_NORMAL, KUI_MP)
-				end
-			elseif TutorialQueue and TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd then
-				module:ttsInterrupt(book)
-				module:ttsQueue(book .. CHAT_HEADER_SUFFIX .. NPEV2_SPELLBOOKREMINDER:format(GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd)), KUI_NORMAL, KUI_MP)
 			else
 				module:ttsYield(book)
 			end
+			if TutorialQueue and TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd then
+				module:ttsQueue(NPEV2_SPELLBOOKREMINDER:format(GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd)), KUI_NORMAL, KUI_MP)
+			end
 		end
 	end
+
+	-- temporary, to be merged into KeyboardUI_Actions.lua to include a tutorial on changing action bar slots
+	module:registerTutorial(function() return TutorialQueue and TutorialQueue.currentTutorial and (TutorialQueue.currentTutorial.spellToAdd or false) end,
+		{
+			function() return TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd and SpellBookFrame:IsShown() or L["PRESS_TO"]:format(GetBindingKey("TOGGLESPELLBOOK") or "", NPEV2_SPELLBOOK_ADD_SPELL:format(GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd))) end,
+			function() return TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd and slot > 0 or L["PRESS_TO"]:format(module:getOption("bindingNextEntryButton"), CHOOSE .. CHAT_HEADER_SUFFIX .. GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd)) end,
+			function() return TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd and action > 0 or L["PRESS_TO"]:format(module:getOption("bindingForwardButton"), CHOOSE .. CHAT_HEADER_SUFFIX .. BINDING_HEADER_ACTIONBAR) end,
+		}
+	)
+	
 
 	SpellBookSpellIconsFrame:Hide()
 	SpellBookSpellIconsFrame:HookScript("OnShow", function(self)
@@ -593,7 +580,8 @@ do
 
 	SpellBookSpellIconsFrame:HookScript("OnHide", function(self)
 		if book == 1 then
-			book = nil
+			hideGlow()
+			book, slot = nil, 0
 			module:updatePriorityKeybinds()
 		end
 	end)
@@ -609,26 +597,62 @@ do
 	end
 
 	SpellBookFrame:HookScript("OnHide", function()
+		hideGlow()
 		book, tab, slot, flyout, action = 0, 0, 0, 0, 0
 	end)
 
+	
 	SpellBookNextPageButton:HookScript("OnClick", function()
 		if not ignorePageButtons then
 			hideGlow()
-			slot, flyout = (slot + SPELLS_PER_PAGE) - (slot % SPELLS_PER_PAGE) + 1, 0
-			position = 1
+			if slot > 0 and getPosition() == SPELLS_PER_PAGE then
+				slot, flyout, useActionSlots = slot + 1, 0, useActionSlots
+			else
+				slot, flyout, useActionSlots = slot - slot % SPELLS_PER_PAGE + SPELLS_PER_PAGE, 0, false
+			end
 			showGlow()
+			module:updatePriorityKeybinds()
 		end
 	end)
 
 	SpellBookPrevPageButton:HookScript("OnClick", function()
 		if not ignorePageButtons then
 			hideGlow()
-			slot, flyout = slot - (slot % SPELLS_PER_PAGE), flyout
-			position = SPELLS_PER_PAGE
+			if slot > 0 and getPosition() == SPELLS_PER_PAGE then
+				slot, flyout, useActionSlots = slot - SPELLS_PER_PAGE, 0, useActionSlots
+			else
+				slot, flyout, useActionSlots = slot - slot % SPELLS_PER_PAGE, 0, false
+			end
 			showGlow()
+			module:updatePriorityKeybinds()
 		end
 	end)
+
+	if SpellFlyout then
+	
+		-- Classic vs. Retail
+		
+		SpellFlyout:HookScript("OnShow", function()
+			local parent = SpellFlyout:GetParent()
+			if parent and parent:GetName():find("SpellButton") then
+				hideGlow()
+				flyout, useActionSlots = 1, false
+				showGlow()
+				module:updatePriorityKeybinds()
+			end
+		end)
+
+		SpellFlyout:HookScript("OnHide", function()
+			hideGlow()
+			flyout, useActionSlots = 0, false
+			showGlow()
+			module:updatePriorityKeybinds()
+		end)
+		
+	end
+	
+--[[
+	-- this wasn't working out in the tutorial.  For some classes, it would go to the wrong spell
 
 	if SpellBookFrame_OpenToSpell then
 		hooksecurefunc("SpellBookFrame_OpenToSpell", function(spellID)
@@ -668,10 +692,12 @@ do
 			end
 			showGlow()
 			useActionSlots = false
-			self:updatePriorityKeybinds()
+			module:updatePriorityKeybinds()
 			module:ttsQueue("Currently at " .. getEntryText())
 		end)
 	end
+	
+--]]
 
 	hooksecurefunc("ToggleSpellBook", function(bookType)
 		if bookType == BOOKTYPE_SPELL and book ~= 1 then
@@ -1010,7 +1036,19 @@ do
 	end)
 	
 	MerchantFrame:HookScript("OnHide", function()
-		module.frame:Show()
+		if not SpellBookFrame:IsShown() then
+			module.frame:Show()
+		end
+	end)
+	
+	SpellBookFrame:HookScript("OnShow", function()
+		module.frame:Hide()
+	end)
+	
+	SpellBookFrame:HookScript("OnHide", function()
+		if not MerchantFrame:IsShown() then
+			module.frame:Show()
+		end
 	end)
 end
 

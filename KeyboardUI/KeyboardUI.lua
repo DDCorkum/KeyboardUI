@@ -19,9 +19,10 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
-0.9 (2022-02-14) by Dahk Celes
+0.9 (2022-03-04) by Dahk Celes
 - Rudimentary keyboard navigation for the backpack and bags
 - Rudimentary support for the retail new player experience
+- Use spells directly from the spell book
 
 0.8 (2022-02-07) by Dahk Celes
 - Extended keyboard navigation to the system options
@@ -335,24 +336,32 @@ local stratas = {
 	TOOLTIP = 80000,
 }
 
+local function setFocus(module)
+	module:GainFocus()
+	module:updatePriorityKeybinds()
+	module:ttsYield(module.title or module.name, KUI_QUICK, KUI_MF)
+end
+
+local function clearFocus(module)
+	module:LoseFocus()
+	lib.removePriorityKeybinds(module)
+end
+
 local function frameOnShow(frame)
 	frame.priority = frame.priority or stratas[frame:GetFrameStrata()] + frame:GetFrameLevel()
 	if #shownFrames == 0 then
 		shownFrames[1] = frame
 		if not InCombatLockdown() then
 			enableOverrideKeybinds()
-			frame.module:GainFocus()
-			frame.module:updatePriorityKeybinds()
+			setFocus(frame.module)
 		end
 	elseif frame.priority > shownFrames[#shownFrames].priority then
 		if InCombatLockdown() then
 			shownFrames[#shownFrames+1] = frame
 		else
-			shownFrames[#shownFrames].module:LoseFocus(shownFrames[#shownFrames])
-			shownFrames[#shownFrames].module:removePriorityKeybinds()
+			clearFocus(shownFrames[#shownFrames].module)
 			shownFrames[#shownFrames+1] = frame
-			frame.module:GainFocus()
-			frame.module:updatePriorityKeybinds()
+			setFocus(frame.module)
 		end
 	else
 		local i = 1
@@ -365,8 +374,7 @@ end
 
 local function frameOnHide(frame)
 	if shownFrames[#shownFrames] == frame then
-		frame.module:LoseFocus()
-		frame.module:removePriorityKeybinds()
+		clearFocus(frame.module)
 		shownFrames[#shownFrames] = nil
 	else
 		for i=#shownFrames, 1, -1 do
@@ -376,10 +384,8 @@ local function frameOnHide(frame)
 			end
 		end
 	end
-	local newFrame = shownFrames[#shownFrames]
-	if newFrame then
-		newFrame.module:GainFocus()
-		newFrame.module:updatePriorityKeybinds()
+	if #shownFrames > 0 then
+		setFocus(shownFrames[#shownFrames].module)
 	else
 		disableOverrideKeybinds()
 	end
@@ -538,16 +544,14 @@ end)
 lib:onEvent("PLAYER_REGEN_DISABLED", function()
 	if #shownFrames > 0 then
 		disableOverrideKeybinds()
-		shownFrames[#shownFrames].module:LoseFocus()
-		shownFrames[#shownFrames].module:removePriorityKeybinds()
+		clearFocus(shownFrames[#shownFrames].module)
 	end
 end)
 
 lib:onEvent("PLAYER_REGEN_ENABLED", function()
 	if #shownFrames > 0 then
 		enableOverrideKeybinds()
-		shownFrames[#shownFrames].module:GainFocus()
-		shownFrames[#shownFrames].module:updatePriorityKeybinds()
+		setFocus(shownFrames[#shownFrames].module)
 	end
 end)
 
@@ -582,7 +586,6 @@ end
 
 function lib:GainFocus()
 	-- Fires when a module is now the target for keybindings.  Followed by self:updatePriorityKeybinds().
-	self:ttsYield(self.title or self.name, KUI_QUICK, KUI_MF)
 end
 
 function lib:LoseFocus()
@@ -1544,40 +1547,81 @@ SLASH_KEYBOARDUI2 = "/kui"
 -------------------------
 -- Tutorial
 
-local tutorials = 
+local tutorialChapters = 
 {
-	function() return 0, UnitLevel("player") == 1 and TUTORIAL_TITLE42 end,
-	function() return 0, UnitLevel("player") == 1 and ("%s%s%s, %s, %s, %s"):format(BINDING_HEADER_MOVEMENT, CHAT_HEADER_SUFFIX, GetBindingKey("MOVEFORWARD") or "", GetBindingKey("MOVEBACKWARD") or "", GetBindingKey("TURNLEFT") or "", GetBindingKey("TURNRIGHT") or "") end,
-	function() return 10, UnitLevel("player") == 1 or UnitLevel("player") == 2 and TutorialQueue.currentTutorial.spellToAdd and not SpellBookFrame:IsShown() and not HasAction(2) and (L["PRESS_TO"]):format(GetBindingKey("TOGGLESPELLBOOK") or "", NPEV2_SPELLBOOK_ADD_SPELL:format(GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd))) end,
 }
 
-local nextTutorial = 1
+local currentTutorial
 
-local function playTutorial()
-	if TutorialQueue.currentTutorial and tutorials[nextTutorial] then
-		local advance, text = tutorials[nextTutorial]()
-		if type(text) == "string" and lib:ttsYield(text, KUI_SLOW, KUI_MP) then
-			if advance == 0 then
-				nextTutorial = nextTutorial + 1
-			end
-			C_Timer.After(advance, playTutorial)
-		elseif text then
-			C_Timer.After(2, playTutorial)
-		else
-			nextTutorial = nextTutorial + 1
-			playTutorial()
+local function startNextTutorial()
+	for trigger in pairs(tutorialChapters) do
+		local val = trigger()
+		if val then
+			currentTutorial = tutorialChapters[trigger]
+			tutorialChapters[trigger] = nil
+			return currentTutorial
+		elseif val == nil then
+			tutorialChapters[trigger] = nil
 		end
-	elseif tutorials[nextTutorial] then
-		C_Timer.After(2, playTutorial)
 	end
 end
 
+local currentTutorialMsg, currentTutorialMsgTime = nil, 0
+
+
+local function playTutorial()
+	C_Timer.After(2, playTutorial)
+	currentTutorial = currentTutorial or startNextTutorial()
+	if currentTutorial then
+		for i=1, #currentTutorial do
+			if type(currentTutorial[i]) == "string" then
+				if lib:ttsYield(currentTutorial[i], KUI_SLOW, KUI_MP) then
+					currentTutorial[i] = function() return true end
+					return
+				end
+			else
+				local val = currentTutorial[i]()
+				if type(val) == "string" then
+					if (val ~= currentTutorialMsg or GetTime() - currentTutorialMsgTime > 12) and not InCombatLockdown() and lib:ttsYield(val, KUI_SLOW, KUI_MP) then
+						currentTutorialMsg = val
+						currentTutorialMsgTime = GetTime()
+					end
+					return
+				elseif val == false then
+					return
+				end
+			end
+		end
+		currentTutorial = nil
+	end
+end
+	
 lib:onEvent("PLAYER_LOGIN", function()
+
+	lib:registerTutorial(function() return UnitLevel("player") == 1 or nil end,
+		{
+			TUTORIAL_TITLE42,
+			("%s%s%s, %s, %s, %s"):format(BINDING_HEADER_MOVEMENT, CHAT_HEADER_SUFFIX, GetBindingKey("MOVEFORWARD") or "", GetBindingKey("MOVEBACKWARD") or "", GetBindingKey("TURNLEFT") or "", GetBindingKey("TURNRIGHT") or ""),
+		}
+	)
+
 	C_Timer.After(10, function()
-		if NPE_TutorialKeyboardMouseFrame_Frame then
-			playTutorial()			
-		elseif UnitLevel("player") < 30 then
+		if not startNextTutorial() and UnitLevel("player") <= 30 then
 			lib:ttsQueue("For help with Keyboard UI, type: slash, K, U, I.", KUI_NORMAL, KUI_PP, true)
 		end
+		playTutorial()
 	end)
 end)
+
+
+-- triggerFunc should return true to activate a tutorial, false to defer execution, or nil when the tutorial is no longer required
+-- stepFuncs should be an array of functions that returns one of the following:
+--		string			play this message through tts
+--		true			move onto the next function in the array; but recheck this again in the future
+--		false			delay for five seconds; the user is not ready for the next tutorial step
+-- alternatively, if a string appears in the table (in lieu of a function) then it will just be spoken one time only when all previous functions return true (or immediately when the tutorial activates, if it was the first element in the array)
+-- once the last function in stepFuncs returns true, the tutorial ends and never fires again
+
+function lib:registerTutorial(triggerFunc, stepFuncs)
+	tutorialChapters[triggerFunc] = stepFuncs
+end
