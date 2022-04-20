@@ -19,6 +19,11 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+0.9 (2022-03-04) by Dahk Celes
+- Rudimentary keyboard navigation for the backpack and bags
+- Rudimentary support for the retail new player experience
+- Use spells directly from the spell book
+
 0.8 (2022-02-07) by Dahk Celes
 - Extended keyboard navigation to the system options
 - Various bug fixes including the quest log and closing windows
@@ -55,6 +60,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 KeyboardUI = {}
 local KeyboardUI = select(2, ...)
+local L = KeyboardUI.text or {}	-- see localization.lua
 --setmetatable(_G["KeyboardUI"], {__index=KeyboardUI})		-- Uncommenting out this line would expose the internal API for other AddOns to integrate with KeyboardUI.
 															-- I havn't yet decided yet to do this, but I am designing KeyboardUI with this future possibility in mind.
 -------------------------
@@ -305,7 +311,7 @@ function lib:updatePriorityKeybinds()
 					command = command()
 				end
 				if option and command then
-					SetOverrideBindingClick(self.frame, true, option, command)
+					SetOverrideBinding(self.frame, true, option, command)
 				end
 			end
 		end
@@ -330,21 +336,32 @@ local stratas = {
 	TOOLTIP = 80000,
 }
 
+local function setFocus(module)
+	module:GainFocus()
+	module:updatePriorityKeybinds()
+	module:ttsYield(module.title or module.name, KUI_QUICK, KUI_MF)
+end
+
+local function clearFocus(module)
+	module:LoseFocus()
+	lib.removePriorityKeybinds(module)
+end
+
 local function frameOnShow(frame)
 	frame.priority = frame.priority or stratas[frame:GetFrameStrata()] + frame:GetFrameLevel()
 	if #shownFrames == 0 then
 		shownFrames[1] = frame
 		if not InCombatLockdown() then
 			enableOverrideKeybinds()
-			frame.module:GainFocus(frame)
+			setFocus(frame.module)
 		end
 	elseif frame.priority > shownFrames[#shownFrames].priority then
 		if InCombatLockdown() then
 			shownFrames[#shownFrames+1] = frame
 		else
-			shownFrames[#shownFrames].module:LoseFocus(shownFrames[#shownFrames])
+			clearFocus(shownFrames[#shownFrames].module)
 			shownFrames[#shownFrames+1] = frame
-			frame.module:GainFocus(frame)
+			setFocus(frame.module)
 		end
 	else
 		local i = 1
@@ -357,8 +374,7 @@ end
 
 local function frameOnHide(frame)
 	if shownFrames[#shownFrames] == frame then
-		frame.module:LoseFocus()
-		frame.module:removePriorityKeybinds()
+		clearFocus(frame.module)
 		shownFrames[#shownFrames] = nil
 	else
 		for i=#shownFrames, 1, -1 do
@@ -368,9 +384,8 @@ local function frameOnHide(frame)
 			end
 		end
 	end
-	local newFrame = shownFrames[#shownFrames]
-	if newFrame then
-		newFrame.module:GainFocus()
+	if #shownFrames > 0 then
+		setFocus(shownFrames[#shownFrames].module)
 	else
 		disableOverrideKeybinds()
 	end
@@ -415,7 +430,6 @@ function KeyboardUI:RegisterModule(module, optIndex)
 		hooksecurefunc(module.frame, "SetFrameStrata", updateFrameStrataAndLevel)
 		hooksecurefunc(module.frame, "SetFrameLevel", updateFrameStrataAndLevel)
 	end
-	
 end
 
 function lib:hasFocus(frame)
@@ -504,6 +518,7 @@ end
 
 lib:onEvent("ADDON_LOADED", function(arg1)
 	if arg1 == "KeyboardUI" then
+		configureVoices()
 		options = KeyboardUIOptions
 		for __, module in ipairs(modules) do	-- order matters.  The global one must be first.
 			configureOptions(module.name)
@@ -517,36 +532,26 @@ lib:onEvent("ADDON_LOADED", function(arg1)
 	elseif frame.numLoaded then
 		for i = frame.numLoaded + 1, #modules do
 			configureOptions(modules[i].name)
-			module.frame:SetShown(KeyboardUIOptions[module.name]["enabled"])
-			module:onOptionChanged("enabled", function(value) module.frame:SetShown(value) end)
+			if not KeyboardUIOptions[modules[i].name]["enabled"] then
+				modules[i].frame:Hide()
+			end
+			modules[i]:onOptionChanged("enabled", function(value) modules[i].frame:SetShown(value) end)
 			modules[i]:Init()
 		end
 	end
 end)
 
-lib:onEvent("PLAYER_LOGIN", function()
-	C_Timer.After(5, function()
-		configureVoices()
-		if KeyboardUIOptions.global.notFirstTime then
-			lib:ttsQueue("For help with Keyboard UI, type: slash, K, U, I.", KUI_NORMAL, KUI_PP, true)
-		else
-			KeyboardUIOptions.global.notFirstTime = true
-			lib:ttsInterrupt([=[<speak>Welcome to Keyboard UI. <silence msec="500"/> For help, type: slash Keyboard UI, all as one word.  Alternatively, type: slash, K, U, I.</speak>]=], KUI_CASUAL, KUI_P, true)
-		end
-	end)
-end)
-
 lib:onEvent("PLAYER_REGEN_DISABLED", function()
 	if #shownFrames > 0 then
 		disableOverrideKeybinds()
-		shownFrames[#shownFrames].module:LoseFocus()
+		clearFocus(shownFrames[#shownFrames].module)
 	end
 end)
 
 lib:onEvent("PLAYER_REGEN_ENABLED", function()
 	if #shownFrames > 0 then
 		enableOverrideKeybinds()
-		shownFrames[#shownFrames].module:GainFocus()
+		setFocus(shownFrames[#shownFrames].module)
 	end
 end)
 
@@ -580,14 +585,11 @@ function lib:Init()
 end
 
 function lib:GainFocus()
-	-- Fires when a module is now the target for keybindings.
-	self:updatePriorityKeybinds()
-	self:ttsYield(self.title or self.name, KUI_QUICK, KUI_MF)
+	-- Fires when a module is now the target for keybindings.  Followed by self:updatePriorityKeybinds().
 end
 
 function lib:LoseFocus()
-	-- Fires when a module is no longer the target for keybindings.
-	self:removePriorityKeybinds()
+	-- Fires when a module is no longer the target for keybindings.  Followed by self:removePriorityKeybinds().
 end
 
 function lib:ChangeTab(...)
@@ -781,7 +783,7 @@ end
 -- Keybindings continued
 
 local function getCurrentModule()
-	return shownFrames[#shownFrames].module
+	return shownFrames[#shownFrames] and shownFrames[#shownFrames].module
 end
 
 CreateFrame("Button", "KeyboardUIChangeTabButton"):SetScript("OnClick", function(__, button, down)
@@ -995,23 +997,34 @@ end
 
 local scanningTooltip = CreateFrame("GameTooltip", "KeyboardUIScanningTooltip", nil, "SharedTooltipTemplate")
 scanningTooltip:SetOwner(frame, "ANCHOR_NONE")
-local scanningTooltipLines = 0
+local scanningTooltipLines = 1
 
-function lib:getScanningTooltip(minLines)
-	scanningTooltip:ClearLines()
-	if minLines and minLines > scanningTooltipLines then
-		for i=1, scanningTooltipLines do
-			scanningTooltip:AddLine(" ")
-		end
-		for i=scanningTooltipLines+1, minLines do
-			scanningTooltip:AddLine(" ")
-			scanningTooltip["left"..i] = _G["KeyboardUIScanningTooltipTextLeft"..i]
-			scanningTooltip["right"..i] = _G["KeyboardUIScanningTooltipTextRight"..i]
-		end
-		scanningTooltip:ClearLines()
+scanningTooltip:SetScript("OnShow", function()
+	local line = _G["KeyboardUIScanningTooltipTextLeft"..scanningTooltipLines]
+	while line do
+		scanningTooltip[scanningTooltipLines*2 - 1] = line
+		scanningTooltip[scanningTooltipLines*2] = _G["KeyboardUIScanningTooltipTextRight"..scanningTooltipLines]
+		scanningTooltipLines = scanningTooltipLines + 1
+		line = _G["KeyboardUIScanningTooltipTextLeft"..scanningTooltipLines]
 	end
+end)
+
+function lib:getScanningTooltip()
+	scanningTooltip:ClearLines()
 	return scanningTooltip
 end
+
+function lib:readScanningTooltip()
+	local text = {}
+	for i=1, #scanningTooltip do
+		local line = scanningTooltip[i]:GetText()
+		if line and line ~= "" then
+			tinsert(text, line)
+		end
+	end
+	return table.concat(text, ". ")
+end
+
 
 -------------------------
 -- Global mouse integration
@@ -1207,7 +1220,7 @@ end
 -------------------------
 -- Options Menu
 
-local panel = CreateFrame("Frame")  foo = panel
+local panel = CreateFrame("Frame")
 panel.name = "KeyboardUI"
 InterfaceOptions_AddCategory(panel)
 panel:Hide()	-- important to trigger scrollFrame OnShow()
@@ -1529,3 +1542,86 @@ function SlashCmdList.KEYBOARDUI(msg)
 end
 SLASH_KEYBOARDUI1 = "/keyboardui"
 SLASH_KEYBOARDUI2 = "/kui"
+
+
+-------------------------
+-- Tutorial
+
+local tutorialChapters = 
+{
+}
+
+local currentTutorial
+
+local function startNextTutorial()
+	for trigger in pairs(tutorialChapters) do
+		local val = trigger()
+		if val then
+			currentTutorial = tutorialChapters[trigger]
+			tutorialChapters[trigger] = nil
+			return currentTutorial
+		elseif val == nil then
+			tutorialChapters[trigger] = nil
+		end
+	end
+end
+
+local currentTutorialMsg, currentTutorialMsgTime = nil, 0
+
+
+local function playTutorial()
+	C_Timer.After(2, playTutorial)
+	currentTutorial = currentTutorial or startNextTutorial()
+	if currentTutorial then
+		for i=1, #currentTutorial do
+			if type(currentTutorial[i]) == "string" then
+				if lib:ttsYield(currentTutorial[i], KUI_SLOW, KUI_MP) then
+					currentTutorial[i] = function() return true end
+					return
+				end
+			else
+				local val = currentTutorial[i]()
+				if type(val) == "string" then
+					if (val ~= currentTutorialMsg or GetTime() - currentTutorialMsgTime > 12) and not InCombatLockdown() and lib:ttsYield(val, KUI_SLOW, KUI_MP) then
+						currentTutorialMsg = val
+						currentTutorialMsgTime = GetTime()
+					end
+					return
+				elseif val == false then
+					return
+				end
+			end
+		end
+		currentTutorial = nil
+	end
+end
+	
+lib:onEvent("PLAYER_LOGIN", function()
+
+	lib:registerTutorial(function() return UnitLevel("player") == 1 or nil end,
+		{
+			TUTORIAL_TITLE42,
+			("%s%s%s, %s, %s, %s"):format(BINDING_HEADER_MOVEMENT, CHAT_HEADER_SUFFIX, GetBindingKey("MOVEFORWARD") or "", GetBindingKey("MOVEBACKWARD") or "", GetBindingKey("TURNLEFT") or "", GetBindingKey("TURNRIGHT") or ""),
+		}
+	)
+
+	C_Timer.After(10, function()
+		if not startNextTutorial() and UnitLevel("player") <= 30 then
+			lib:ttsQueue("For help with Keyboard UI, type: slash, K, U, I.", KUI_NORMAL, KUI_PP, true)
+		end
+		playTutorial()
+	end)
+end)
+
+
+-- triggerFunc should return true to activate a tutorial, false to defer execution, or nil when the tutorial is no longer required
+-- stepFuncs should be an array of functions that returns one of the following:
+--		string			play this message through tts
+--		true			move onto the next function in the array; but recheck this again in the future
+--		false			delay for five seconds; the user is not ready for the next tutorial step
+-- alternatively, if a string appears in the table (in lieu of a function) then it will just be spoken one time only when all previous functions return true (or immediately when the tutorial activates, if it was the first element in the array)
+-- once the last function in stepFuncs returns true, the tutorial ends and never fires again
+
+function lib:registerTutorial(triggerFunc, stepFuncs)
+	tutorialChapters[triggerFunc] = stepFuncs
+end

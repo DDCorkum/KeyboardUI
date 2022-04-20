@@ -119,7 +119,10 @@ DropDownList1:HookScript("OnShow", function()
 	currentButtons[1] = 1
 	getButton().Highlight:Show()
 	module:updatePriorityKeybinds()
-	module:ttsInterrupt("Dropdown" .. getText(), KUI_QUICK, KUI_MF)
+	local text = getText()
+	if text then
+		module:ttsInterrupt("Dropdown" .. getText(), KUI_QUICK, KUI_MF)
+	end
 end)
 
 DropDownList1:HookScript("OnHide", function()

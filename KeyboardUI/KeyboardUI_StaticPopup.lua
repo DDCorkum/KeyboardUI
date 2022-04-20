@@ -38,10 +38,10 @@ local module =
 	},
 	secureButtons =
 	{
-		bindingDoActionButton1 = function() return currentPopup > 0 and buttons[currentPopup][1]:IsVisible() and buttons[currentPopup][1] end,
-		bindingDoActionButton2 = function() return currentPopup > 0 and buttons[currentPopup][2]:IsVisible() and buttons[currentPopup][2] end,
-		bindingDoActionButton3 = function() return currentPopup > 0 and buttons[currentPopup][3]:IsVisible() and buttons[currentPopup][3] end,
-		bindingDoActionButton4 = function() return currentPopup > 0 and buttons[currentPopup][4]:IsVisible() and buttons[currentPopup][4] end,
+		bindingDoAction1Button = function() return currentPopup > 0 and buttons[currentPopup][1]:IsVisible() and buttons[currentPopup][1] end,
+		bindingDoAction2Button = function() return currentPopup > 0 and buttons[currentPopup][2]:IsVisible() and buttons[currentPopup][2] end,
+		bindingDoAction3Button = function() return currentPopup > 0 and buttons[currentPopup][3]:IsVisible() and buttons[currentPopup][3] end,
+		bindingDoAction4Button = function() return currentPopup > 0 and buttons[currentPopup][4]:IsVisible() and buttons[currentPopup][4] end,
 		bindingDoActionButton = function() return currentButton > 0 and buttons[currentPopup][currentButton] end,
 	},
 }
@@ -61,7 +61,6 @@ function module:NextEntry()
 	elseif currentPopup > 0 then
 		return popups[currentPopup].text:GetText()
 	end
-	currentPopup = 0
 end
 
 function module:PrevEntry()
@@ -73,7 +72,6 @@ function module:PrevEntry()
 	elseif currentPopup > 0 then
 		return popups[currentPopup].text:GetText()
 	end
-	currentPopup = 0
 end
 
 function module:RefreshEntry()
