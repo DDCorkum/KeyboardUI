@@ -19,6 +19,10 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+0.10 (2022-04-19) by Dahk Celes
+- Adding NPC gossip and quest frames
+- Adding player talents in retail 
+
 0.9 (2022-03-04) by Dahk Celes
 - Rudimentary keyboard navigation for the backpack and bags
 - Rudimentary support for the retail new player experience
@@ -618,7 +622,7 @@ function lib:PrevEntry(...)
 end
 
 function lib:RefreshEntry(...)
-	return self:NextEntry(...)
+	return true
 end
 
 function lib:Forward(...)
@@ -629,20 +633,6 @@ end
 function lib:Backward(...)
 	-- Override to go backward to the last action, or to do the only action in the reverse direction (when applicable)
 	return self:Forward(...)  -- this is a bad user experience; it *should* be overridden!
-end
-
-function lib:NextAction(...)
-	-- Always override or it will throw an error.
-	if self.frame then
-		self.frame.Show = self.frame.Hide
-		self.frame:Hide()
-	end
-	print("Keyboard UI: The " .. self.name .. " module is missing module:NextAction().")
-end
-
-function lib:PrevAction(...)
-	-- This is a bad user experience; 99% of modules should override this.
-	lib:NextAction(...)
 end
 
 function lib:Actions()
@@ -702,6 +692,7 @@ ttsFrame:SetScript("OnUpdate", function()
 	if #ttsFrame > 0 then
 		local tbl = tremove(ttsFrame,1)
 		ttsFrame.current = tbl[2]
+		ttsFrame:Hide()
 		C_VoiceChat.SpeakText(unpack(tbl))
 	end
 end)
@@ -748,16 +739,23 @@ end
 
 -- halt any ongoing messages
 function lib:ttsStop()
+	for i=1, #ttsFrame do
+		ttsFrame[i] = nil
+	end
 	C_VoiceChat.StopSpeakingText()
 end
 
 -- say something immediately, cutting off earlier messages
 function lib:ttsInterrupt(...)
-	for i=1, #ttsFrame do
-		ttsFrame[i] = nil
-	end
 	self:ttsStop()
 	self:ttsQueue(...)
+end
+
+-- say three things in a row, using a body/intro/conclusion pattern
+function lib:ttsInterruptExtended(intro, body, conclusion)
+	self:ttsInterrupt(intro, KUI_QUICK, KUI_MF)
+	self:ttsQueue(body, KUI_CASUAL, KUI_MP)
+	self:ttsQueue(conclusion, KUI_NORMAL, KUI_MF)
 end
 
 local function hideTooltip()
@@ -888,7 +886,7 @@ CreateFrame("Button", "KeyboardUIReadDescriptionButton"):SetScript("OnClick", fu
 	local module = getCurrentModule()
 	if module and module:RefreshEntry() then
 		local introduction, body, conclusion = module:GetEntryLongDescription()
-		if body then
+		if body or conclusion then
 			module:ttsInterrupt(introduction, KUI_QUICK, KUI_MF)
 			module:ttsQueue(body, KUI_CASUAL, KUI_MP)
 			module:ttsQueue(conclusion, KUI_NORMAL, KUI_MF)
@@ -1025,6 +1023,21 @@ function lib:readScanningTooltip()
 	return table.concat(text, ". ")
 end
 
+
+-- Executes func() right away if _G[frame] exists, or after _G[trigger] happens for the first time.
+function lib:hookWhenFirstLoaded(frame, trigger, func)
+	if (_G[frame]) then
+		func(self, _G[frame])
+		return true;
+	elseif (type("trigger") == "string" and _G[trigger]) then
+		hooksecurefunc(trigger, function()
+			func(self, _G[frame])
+			func = nop
+		end)
+		return true;
+	end
+	return false;
+end
 
 -------------------------
 -- Global mouse integration
