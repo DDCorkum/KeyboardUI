@@ -424,6 +424,7 @@ do
 			flyout, useActionSlots = flyout + 1, false
 			showGlow()
 			self:updatePriorityKeybinds()
+			return getEntryText()
 		else
 			__, __, numSpells = getPositionInBook()
 			if slot < numSpells then
@@ -456,11 +457,13 @@ do
 			flyout, useActionSlots = flyout - 1, false
 			showGlow()
 			module:updatePriorityKeybinds()
+			return getEntryText()
 		elseif slot > 1 then
 			hideGlow()
 			slot, useActionSlots = slot - 1, false
 			showGlow()
 			self:updatePriorityKeybinds()
+			return getEntryText()
 		end
 	end
 
@@ -566,7 +569,14 @@ do
 	SpellBookSpellIconsFrame:Hide()
 	SpellBookSpellIconsFrame:HookScript("OnShow", function(self)
 		if SpellBookFrame.bookType == BOOKTYPE_SPELL then
-			book, tab, slot, flyout =  1, SpellBookFrame.selectedSkillLine, 0, 0
+			book, tab, flyout =  1, SpellBookFrame.selectedSkillLine, 0
+			local page = SpellBook_GetCurrentPage()
+			if page == 1 then
+				slot = 0
+			else
+				slot = (page-1) * SPELLS_PER_PAGE + 1
+				showGlow()
+			end
 			useActionSlots = false
 			module:updatePriorityKeybinds()
 			announce(self, SPELLBOOK)
@@ -598,7 +608,7 @@ do
 
 	SpellBookFrame:HookScript("OnHide", function()
 		hideGlow()
-		book, tab, slot, flyout, action = 0, 0, 0, 0, 0
+		flyout, action = 0, 0
 	end)
 
 	
@@ -702,7 +712,14 @@ do
 	hooksecurefunc("ToggleSpellBook", function(bookType)
 		if bookType == BOOKTYPE_SPELL and book ~= 1 then
 			hideGlow()
-			book, tab, slot, flyout = 1, SpellBookFrame.selectedSkillLine, 0, 0
+			book, tab, flyout = 1, SpellBookFrame.selectedSkillLine, 0
+			local page = SpellBook_GetCurrentPage()
+			if page == 1 then
+				slot = 0
+			else
+				slot = (page-1) * SPELLS_PER_PAGE + 1
+				showGlow()
+			end
 			module:updatePriorityKeybinds()
 		elseif bookType == BOOKTYPE_PET and book ~= 3 and HasPetSpells() then
 			hideGlow()
@@ -715,7 +732,14 @@ do
 
 	hooksecurefunc ("SpellBookFrame_Update", function()
 		if book == 1 and tab ~= SpellBookFrame.selectedSkillLine then
-			tab, slot, flyout = SpellBookFrame.selectedSkillLine, 0, 0
+			tab, flyout = SpellBookFrame.selectedSkillLine, 0
+			local page = SpellBook_GetCurrentPage()
+			if page == 1 then
+				slot = 0
+			else
+				slot = (page-1) * SPELLS_PER_PAGE + 1
+				showGlow()
+			end
 			module:updatePriorityKeybinds()
 			module:ttsYield(GetSpellTabInfo(tab) or "General")
 		end
@@ -1072,7 +1096,7 @@ end
 -------------------------
 -- PlayerTalentFrameSpecialization (Retail)
 
-if TalentFrame_LoadUI then
+if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 
 	local spec, ability = 0, 0
 	
@@ -1152,7 +1176,7 @@ end
 -------------------------
 -- PlayerTalentFrameTalents (Retail)
 
-if TalentFrame_LoadUI then
+if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 
 	local tier = 0
 	
@@ -1168,7 +1192,7 @@ if TalentFrame_LoadUI then
 	KeyboardUI:RegisterModule(module)
 	
 	module:hookWhenFirstLoaded("PlayerTalentFrameTalents", "TalentFrame_LoadUI", function()
-		module.frame:SetParent(PlayerTalentFrameTalents)
+			module.frame:SetParent(PlayerTalentFrameTalents)
 	end)
 
 	function module:ChangeTab()
@@ -1229,24 +1253,32 @@ if TalentFrame_LoadUI then
 	
 	function module:Forward()
 		if tier > 0 then
-			local __, selectedTalent = GetTalentTierInfo(tier, GetActiveSpecGroup())
-			if selectedTalent < NUM_TALENT_COLUMNS then
-				_G["PlayerTalentFrameTalentsTalentRow"..tier.."Talent"..(selectedTalent+1)]:Click()
-				attemptedColumn = selectedTalent+1
-				C_Timer.After(0.5, clearAttemptedColumn)
-				return selectedTalent+1
+			if IsResting() then
+				local __, selectedTalent = GetTalentTierInfo(tier, GetActiveSpecGroup())
+				if selectedTalent and selectedTalent < NUM_TALENT_COLUMNS then
+					_G["PlayerTalentFrameTalentsTalentRow"..tier.."Talent"..(selectedTalent+1)]:Click()
+					attemptedColumn = selectedTalent+1
+					C_Timer.After(0.5, clearAttemptedColumn)
+					return selectedTalent+1
+				end
+			else
+				return TALENT_TOOLTIP_ADD_REST_ERROR
 			end
 		end
 	end
 	
 	function module:Backward()
 		if tier > 0 then
-			local __, selectedTalent = GetTalentTierInfo(tier, GetActiveSpecGroup())
-			if selectedTalent > 1 then
-				_G["PlayerTalentFrameTalentsTalentRow"..tier.."Talent"..(selectedTalent-1)]:Click()
-				attemptedColumn = selectedTalent-1
-				C_Timer.After(0.5, clearAttemptedColumn)
-				return selectedTalent-1
+			if IsResting() then
+				local __, selectedTalent = GetTalentTierInfo(tier, GetActiveSpecGroup())
+				if selectedTalent > 1 then
+					_G["PlayerTalentFrameTalentsTalentRow"..tier.."Talent"..(selectedTalent-1)]:Click()
+					attemptedColumn = selectedTalent-1
+					C_Timer.After(0.5, clearAttemptedColumn)
+					return selectedTalent-1
+				end
+			else
+				return TALENT_TOOLTIP_ADD_REST_ERROR
 			end
 		end
 	end

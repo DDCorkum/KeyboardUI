@@ -19,9 +19,10 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
-0.10 (2022-04-19) by Dahk Celes
+0.10 (2022-05-03) by Dahk Celes
 - Adding NPC gossip and quest frames
-- Adding player talents in retail 
+- Adding player talents in retail
+- Spell book bugfixes
 
 0.9 (2022-03-04) by Dahk Celes
 - Rudimentary keyboard navigation for the backpack and bags

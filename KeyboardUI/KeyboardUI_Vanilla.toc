@@ -1,4 +1,4 @@
-## Interface: 11402
+## Interface: 11403
 ## Title: KeyboardUI
 ## Notes: Keyboard user interface with text to speech
 ## Author: Dahk Celes (DDCorkum), in partnership with RogueEugor (A. Agostino)
@@ -15,3 +15,4 @@ KeyboardUI_UIDropDownMenu.lua
 # Frames
 KeyboardUI_GameMenu.lua
 KeyboardUI_Actions.lua
+KeyboardUI_Dialog.lua

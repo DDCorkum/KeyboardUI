@@ -15,3 +15,4 @@ KeyboardUI_UIDropDownMenu.lua
 # Frames
 KeyboardUI_GameMenu.lua
 KeyboardUI_Actions.lua
+KeyboardUI_Dialog.lua
