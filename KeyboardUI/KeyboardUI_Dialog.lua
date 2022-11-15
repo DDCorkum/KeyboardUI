@@ -18,6 +18,7 @@ do
 
 	local entry, entries = 0, 0
 	local buttons	 -- delayed until after GossipFrameUpdate()
+	local previousSpeaker
 
 	local module =
 	{
@@ -27,6 +28,11 @@ do
 	}
 
 	KeyboardUI:RegisterModule(module)
+
+	local function getGreetingText()
+		-- Classic vs WoW 10.x
+		return GossipGreetingText and GossipGreetingText:GetText() or GossipFrame.GreetingPanel.ScrollBox.ScrollTarget:GetChildren().GreetingText:GetText()
+	end
 
 	function module:NextEntry()
 		if entries > 0 then
@@ -47,7 +53,7 @@ do
 	end
 
 	function module:GetEntryLongDescription()
-		return GossipGreetingText:GetText(), entry > 0 and entry .. ". " .. buttons[entry]:GetText()
+		return getGreetingText(), entry > 0 and entry .. ". " .. buttons[entry]:GetText()
 	end
 
 	function module:Actions()
@@ -74,25 +80,37 @@ do
 		end
 	end
 
-	hooksecurefunc("GossipFrameUpdate", function()
+	local function onGossipFrameUpdate()
 		buttons = GossipFrame.buttons
-		if not buttons then
+		if not buttons or #buttons == 0 then
 			buttons = {}
 			for i=1, 32 do
-				local x = _G["GossipTitleButton"..i]
-				if x and x:GetText() then
+				-- Classic vs WoW 10.x
+				local x = GossipGreetingScrollFrame and _G["GossipTitleButton"..i] or select(i+1,GossipFrame.GreetingPanel.ScrollBox.ScrollTarget:GetChildren())
+				if x and x:IsObjectType("Button") and x:GetText() and x:IsVisible() then
 					tinsert(buttons, x)
 				end
 			end
 		end
 		entries = #buttons
 		entry = 0
-		C_Timer.After(0.2, function()
-			if not (TalkingHeadFrame and TalkingHeadFrame:IsVisible()) then
-				module:ttsInterrupt("<speak><silence msec=\"1800\" />" .. GossipGreetingText:GetText():gsub("[\<\>]", " -- ") .. "</speak>")
+		if not (TalkingHeadFrame and TalkingHeadFrame:IsVisible()) then
+			local speaker = GossipFrameTitleText and GossipFrameTitleText:IsVisible() and GossipFrameTitleText:GetText() or nil
+			if speaker and speaker ~= previousSpeaker then
+				module:ttsInterrupt("<speak><silence msec=\"300\" />" .. CHAT_SAY_GET:format(GossipFrameTitleText:GetText()) .. "<silence msec=\"100\" />" .. getGreetingText():gsub("[\<\>\"]", " -- ") .. "</speak>")
+			else
+				module:ttsInterrupt("<speak><silence msec=\"500\" />" .. getGreetingText():gsub("[\<\>\"]", " -- ") .. "</speak>")
 			end
-		end)
-	end)
+			previousSpeaker = speaker
+		end
+	end
+
+	--module:onEvent("GOSSIP_SHOW", onGossipFrameUpdate)
+	if GossipFrameUpdate then
+		hooksecurefunc("GossipFrameUpdate", onGossipFrameUpdate)		
+	else
+		hooksecurefunc(GossipFrame, "Update", onGossipFrameUpdate)
+	end
 
 end
 

@@ -1,9 +1,9 @@
-## Interface: 20504
+## Interface: 30400
 ## Title: KeyboardUI
 ## Notes: Keyboard user interface with text to speech
 ## Author: Dahk Celes (DDCorkum), in partnership with RogueEugor (A. Agostino)
 ## X-License: All Rights Reserved
-## Version: 0.10
+## Version: 10.01
 ## SavedVariables: KeyboardUIOptions
 
 # Core addon and widgets

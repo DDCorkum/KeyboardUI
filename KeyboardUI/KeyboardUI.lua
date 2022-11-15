@@ -19,6 +19,10 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+10.01 (2022-11-15) by Dahk Celes
+- Updates for Dragonflight
+- Avoids forbidden frames
+
 0.10 (2022-05-03) by Dahk Celes
 - Adding NPC gossip and quest frames
 - Adding player talents in retail
@@ -71,15 +75,15 @@ local L = KeyboardUI.text or {}	-- see localization.lua
 -------------------------
 -- Constants
 
--- Multiplied with volumeVariance
-KUI_FF =  0.00
-KUI_F  = -0.10
-KUI_MF = -0.20 -- default
-KUI_MP = -0.30
-KUI_P  = -0.50
-KUI_PP = -1.00
+-- Multiplied with volumeVariance, which ranges between 0 and 50
+KUI_FF =  0.000
+KUI_F  = -0.001
+KUI_MF = -0.002 -- default
+KUI_MP = -0.003
+KUI_P  = -0.005
+KUI_PP = -0.010
 
--- Multiplied with speedVariance
+-- Multiplied with speedVariance, which ranges between 0 and 4
 KUI_SLOW	= -1.00
 KUI_CASUAL 	= -0.75
 KUI_NORMAL 	= -0.50	-- default
@@ -510,7 +514,7 @@ local function configureVoices()
 	for __, voice in ipairs(voices) do
 		if voice.name:find("English") and (voice.voiceID == opt1 or voice.voiceID == opt2 or not KUI_VOICE_ENGLISH) then
 			KUI_VOICE_ENGLISH = voice.voiceID
-			if voice.voiceID == opt2 then
+			if voice.voiceID == opt1 then
 				-- this is the preferred option
 				break;
 			end
@@ -700,7 +704,7 @@ end)
 
 -- say something when previous messages have finished
 function lib:ttsQueue(text, rate, dynamics, useEnglish)
-	local volume = self:getOption("volumeMax") * (1 - (dynamics or KUI_MF) * self:getOption("volumeVariance") / 50)
+	local volume = self:getOption("volumeMax") * (1 + (dynamics or KUI_MF) * self:getOption("volumeVariance"))
 	if KUI_VOICE and volume > 0  and text and text ~= "" and self:getOption("enabled") and not ttsFrame.isBlocking then
 		text = tostring(text)
 		rate = self:getOption("speedMax") + (rate or KUI_NORMAL) * self:getOption("speedVariance")
@@ -1063,15 +1067,14 @@ do
 			monitorNonPlayers = false
 		end
 	end
-
-	lib:onEvent("CURSOR_UPDATE", function()
+	
+	lib:onEvent(WOW_PROJECT_ID == WOW_PROJECT_CLASSIC and "CURSOR_UPDATE" or "CURSOR_CHANGED", function()
 		if GetMouseFocus() == WorldFrame then
 			monitorNonPlayers = true
-			GameTooltip:Hide()
 			C_Timer.After(0, stopMonitoringTooltip)
 		end
 	end)
-		
+	
 	local function monitorWorldFrameTooltips()
 		local mouseFocus = GetMouseFocus()
 		if mouseFocus == WorldFrame and onEnter and (
@@ -1085,12 +1088,12 @@ do
 				lastOnEnterPing = message
 			end
 			if message and message ~= lastWorldFrameMessage and not lastOnEnterPingInProgress then
-				-- lib:ttsStopMessage(lastWorldFrameMessage) -- this causes stuttering in Patch 9.1.5; but in the 9.2 PTR it seems to work
+				lib:ttsStopMessage(lastWorldFrameMessage) -- this line caused stuttering in Patch 9.1.5; but has seemed okay from 9.2.0 onwards
 				if lib:ttsYield(GameTooltipTextLeft1:GetText(), KUI_RAPID, KUI_PP) then
 					lastWorldFrameMessage = message
 				end
 			end
-		elseif mouseFocus and onEnter and onEnterSayUI and GameTooltip:IsShown() and (mouseFocus == GameTooltip:GetOwner() or mouseFocus:GetScript("OnLeave") ~= nil) and select(2, GameTooltip:GetOwner()) ~= "ANCHOR_NONE" then
+		elseif mouseFocus and not mouseFocus:IsForbidden() and onEnter and onEnterSayUI and GameTooltip:IsShown() and (mouseFocus == GameTooltip:GetOwner() or mouseFocus:GetScript("OnLeave") ~= nil) and select(2, GameTooltip:GetOwner()) ~= "ANCHOR_NONE" then
 			monitorNonPlayers = nil
 			lastOnEnterPing = nil
 			lastWorldFrameMessage = nil
@@ -1162,7 +1165,9 @@ do
 				end
 			end
 			if lastUIObjectLine == 1 and not lastOnEnterPingInProgress then 
-				local text = mouseFocus.GetText and mouseFocus:GetText() 
+				local text = 
+					mouseFocus:IsForbidden() and UNKNOWN
+					or mouseFocus.GetText and mouseFocus:GetText() 
 					or type(mouseFocus.text) == "table" and mouseFocus.text.GetText and mouseFocus.text:GetText()
 					or type(mouseFocus.Text) == "table" and mouseFocus.Text.GetText and mouseFocus.Text:GetText()
 				if text then
@@ -1236,7 +1241,6 @@ end
 
 local panel = CreateFrame("Frame")
 panel.name = "KeyboardUI"
-InterfaceOptions_AddCategory(panel)
 panel:Hide()	-- important to trigger scrollFrame OnShow()
 
 local kuiOptions = {name = "global", frame = panel, title = TEXT_TO_SPEECH}
@@ -1276,6 +1280,8 @@ function panel.cancel()
 	end
 end
 
+InterfaceOptions_AddCategory(panel)
+
 local title = panel:CreateFontString("ARTWORK", nil, "GameFontNormalLarge")
 title:SetText("Keyboard User Interface")
 title:SetPoint("TOP", 0, -5)
@@ -1295,7 +1301,7 @@ track:SetPoint("BOTTOMRIGHT", scrollParent, 22, 0)
 
 local scrollChild = CreateFrame("Frame")
 scrollParent:SetScrollChild(scrollChild)
-scrollChild:SetWidth(InterfaceOptionsFramePanelContainer:GetWidth()-18)
+scrollChild:SetWidth((InterfaceOptionsFramePanelContainer or SettingsPanel.Container.SettingsCanvas):GetWidth()-18)
 
 -- defer creating most widgets until the first OnShow() which follows right after these lib funcs.
 -- also defer creating the functions to handle keyboard input until the first OnShow()
@@ -1527,9 +1533,13 @@ end)	-- end of scrollChild:OnShow()
 -- Slash command
 
 function SlashCmdList.KEYBOARDUI(msg)
-	InterfaceAddOnsList_Update()	-- https://github.com/Stanzilla/WoWUIBugs/issues/89
-	InterfaceOptionsFrame_OpenToCategory(panel)
-	
+	if InterfaceAddOnsList_Update and (WOW_PROJECT_ID == WOW_PROJECT_CLASSIC or WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC) then
+		InterfaceAddOnsList_Update()	-- https://github.com/Stanzilla/WoWUIBugs/issues/89
+		InterfaceOptionsFrame_OpenToCategory(panel)
+	else
+		-- WoW 10.x
+		Settings.OpenToCategory(panel.name)
+	end
 	-- give the user a hint
 	modules[1]:ttsStop()
 	local hintText = [=[<speak>Keyboard UI Options.  Keyboard UI has various keybindings which activate only outside combat, and only while a keyboard-enabled window appears.
