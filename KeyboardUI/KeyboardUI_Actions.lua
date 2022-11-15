@@ -424,6 +424,7 @@ do
 			flyout, useActionSlots = flyout + 1, false
 			showGlow()
 			self:updatePriorityKeybinds()
+			return getEntryText()
 		else
 			__, __, numSpells = getPositionInBook()
 			if slot < numSpells then
@@ -456,11 +457,13 @@ do
 			flyout, useActionSlots = flyout - 1, false
 			showGlow()
 			module:updatePriorityKeybinds()
+			return getEntryText()
 		elseif slot > 1 then
 			hideGlow()
 			slot, useActionSlots = slot - 1, false
 			showGlow()
 			self:updatePriorityKeybinds()
+			return getEntryText()
 		end
 	end
 
@@ -566,7 +569,14 @@ do
 	SpellBookSpellIconsFrame:Hide()
 	SpellBookSpellIconsFrame:HookScript("OnShow", function(self)
 		if SpellBookFrame.bookType == BOOKTYPE_SPELL then
-			book, tab, slot, flyout =  1, SpellBookFrame.selectedSkillLine, 0, 0
+			book, tab, flyout =  1, SpellBookFrame.selectedSkillLine, 0
+			local page = SpellBook_GetCurrentPage()
+			if page == 1 then
+				slot = 0
+			else
+				slot = (page-1) * SPELLS_PER_PAGE + 1
+				showGlow()
+			end
 			useActionSlots = false
 			module:updatePriorityKeybinds()
 			announce(self, SPELLBOOK)
@@ -598,7 +608,7 @@ do
 
 	SpellBookFrame:HookScript("OnHide", function()
 		hideGlow()
-		book, tab, slot, flyout, action = 0, 0, 0, 0, 0
+		flyout, action = 0, 0
 	end)
 
 	
@@ -702,7 +712,14 @@ do
 	hooksecurefunc("ToggleSpellBook", function(bookType)
 		if bookType == BOOKTYPE_SPELL and book ~= 1 then
 			hideGlow()
-			book, tab, slot, flyout = 1, SpellBookFrame.selectedSkillLine, 0, 0
+			book, tab, flyout = 1, SpellBookFrame.selectedSkillLine, 0
+			local page = SpellBook_GetCurrentPage()
+			if page == 1 then
+				slot = 0
+			else
+				slot = (page-1) * SPELLS_PER_PAGE + 1
+				showGlow()
+			end
 			module:updatePriorityKeybinds()
 		elseif bookType == BOOKTYPE_PET and book ~= 3 and HasPetSpells() then
 			hideGlow()
@@ -715,7 +732,14 @@ do
 
 	hooksecurefunc ("SpellBookFrame_Update", function()
 		if book == 1 and tab ~= SpellBookFrame.selectedSkillLine then
-			tab, slot, flyout = SpellBookFrame.selectedSkillLine, 0, 0
+			tab, flyout = SpellBookFrame.selectedSkillLine, 0
+			local page = SpellBook_GetCurrentPage()
+			if page == 1 then
+				slot = 0
+			else
+				slot = (page-1) * SPELLS_PER_PAGE + 1
+				showGlow()
+			end
 			module:updatePriorityKeybinds()
 			module:ttsYield(GetSpellTabInfo(tab) or "General")
 		end
@@ -1052,14 +1076,262 @@ do
 	end)
 end
 
+
+-------------------------
+-- MerchantFrame
+
 do
 	local module =
 	{
 		name = "MerchantFrame",
 		title = MERCHANT,
-		frame = MerchantFrame,
+		frame = CreateFrame("Frame", nil, MerchantFrame),
 	}
 	
 	-- NYI
 	--KeyboardUI:RegisterModule(module)
+end
+
+
+-------------------------
+-- PlayerTalentFrameSpecialization (Retail)
+
+if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
+
+	local spec, ability = 0, 0
+	
+	local module =
+	{
+		name = "PlayerTalentFrameSpecialization",
+		title = SPECIALIZATION,
+		frame = CreateFrame("Frame", nil, CreateFrame("Frame")),
+	}
+	
+	module.frame:GetParent():Hide()
+	
+	KeyboardUI:RegisterModule(module)
+	
+	module:hookWhenFirstLoaded("PlayerTalentFrameSpecialization", "TalentFrame_LoadUI", function()
+		module.frame:SetParent(PlayerTalentFrameSpecialization)
+		
+		hooksecurefunc("PlayerTalentFrame_UpdateSpecFrame", function(self)
+			spec, ability = self.previewSpec or 0, 0
+			name, description, misc = module:GetEntryLongDescription()
+			if name then
+				module:ttsInterruptExtended("<speak><silence msec=\"1800\" />" .. name .. "</speak>", description, misc)
+			end
+		end)
+	end)
+
+	function module:ChangeTab()
+		PlayerTalentFrameTab2:Click()
+		return TALENTS
+	end
+
+	function module:NextEntry()
+		if spec < GetNumSpecializations() then
+			_G["PlayerTalentFrameSpecializationSpecButton"..spec+1]:Click()
+			return self:GetEntryLongDescription()
+		end
+	end
+	
+	function module:PrevEntry()
+		if spec > 1 then
+			_G["PlayerTalentFrameSpecializationSpecButton"..spec-1]:Click()
+			return self:GetEntryLongDescription()
+		end	
+	end
+
+	function module:Actions()
+		return 
+	end
+
+	function module:DoAction()
+		if ability == 0 then
+			PlayerTalentFrameSpecializationLearnButton:Click()
+		end
+	end
+	
+	function module:RefreshEntry()
+		return spec > 0
+	end
+	
+	function module:GetEntryLongDescription()
+		if spec > 0 then
+			local __, name, description, __, role, primaryStat = GetSpecializationInfo(spec)
+			details = role .. ". " .. SPEC_FRAME_PRIMARY_STAT:format(SPEC_STAT_STRINGS[primaryStat]) .. ". " .. ABILITIES .. CHAT_HEADER_SUFFIX
+			for i=1,10 do
+				local fontString = _G["PlayerTalentFrameSpecializationSpellScrollFrameScrollChildAbility"..i.."Name"]
+				if fontString then
+					details = details .. ", " .. fontString:GetText()
+				end
+			end
+			return name, description, details
+		end
+	end
+	
+end
+
+
+-------------------------
+-- PlayerTalentFrameTalents (Retail)
+
+if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
+
+	local tier = 0
+	
+	local module =
+	{
+		name = "PlayerTalentFrameTalents",
+		title = TALENTS,
+		frame = CreateFrame("Frame", nil, CreateFrame("Frame")),
+	}
+	
+	module.frame:GetParent():Hide()
+	
+	KeyboardUI:RegisterModule(module)
+	
+	module:hookWhenFirstLoaded("PlayerTalentFrameTalents", "TalentFrame_LoadUI", function()
+			module.frame:SetParent(PlayerTalentFrameTalents)
+	end)
+
+	function module:ChangeTab()
+		PlayerTalentFrameTab1:Click()
+		return SPECIALIZATION
+	end
+
+	local glow = module.frame:CreateTexture(nil, ARTWORK, -1)
+	glow:Hide()
+	glow:SetColorTexture(1, 1, 0, 0.1)
+
+	function module:NextEntry()
+		if tier < MAX_TALENT_TIERS then
+			tier = tier + 1
+			glow:SetParent(_G["PlayerTalentFrameTalentsTalentRow"..tier])
+			glow:SetAllPoints()
+			glow:Show()
+			local activeSpec = GetActiveSpecGroup()
+			local tierAvailable, selectedTalent, tierUnlockLevel = GetTalentTierInfo(tier, activeSpec)
+			if tierAvailable then
+				if selectedTalent and selectedTalent > 0 then
+					local __, name = GetTalentInfo(tier, selectedTalent, activeSpec)
+					return LEVEL_GAINED:format(tierUnlockLevel) .. CHAT_HEADER_SUFFIX .. name
+				else
+					return LEVEL_GAINED:format(tierUnlockLevel) .. CHAT_HEADER_SUFFIX .. LEVEL_UP_TALENT_MAIN
+				end
+			else
+				return LEVEL_GAINED:format(tierUnlockLevel) .. CHAT_HEADER_SUFFIX .. PVP_TALENTS_BECOME_AVAILABLE_AT_LEVEL:format(tierUnlockLevel)
+			end
+		end
+	end
+	
+	function module:PrevEntry()
+		if tier > 1 then
+			tier = tier - 1
+			glow:SetParent(_G["PlayerTalentFrameTalentsTalentRow"..tier])
+			glow:SetAllPoints()
+			glow:Show()
+			local activeSpec = GetActiveSpecGroup()
+			local tierAvailable, selectedTalent, tierUnlockLevel = GetTalentTierInfo(tier, activeSpec)
+			if tierAvailable then
+				if selectedTalent and selectedTalent > 0 then
+					local __, name = GetTalentInfo(tier, selectedTalent, activeSpec)
+					return LEVEL_GAINED:format(tierUnlockLevel) .. CHAT_HEADER_SUFFIX .. name
+				else
+					return LEVEL_GAINED:format(tierUnlockLevel) .. CHAT_HEADER_SUFFIX .. LEVEL_UP_TALENT_MAIN
+				end
+			else
+				return LEVEL_GAINED:format(tierUnlockLevel) .. CHAT_HEADER_SUFFIX .. PVP_TALENTS_BECOME_AVAILABLE_AT_LEVEL:format(tierUnlockLevel)
+			end
+		end
+	end
+	
+	local attemptedColumn
+	local function clearAttemptedColumn()
+		attemptedColumn = nil
+	end
+	
+	function module:Forward()
+		if tier > 0 then
+			if IsResting() then
+				local __, selectedTalent = GetTalentTierInfo(tier, GetActiveSpecGroup())
+				if selectedTalent and selectedTalent < NUM_TALENT_COLUMNS then
+					_G["PlayerTalentFrameTalentsTalentRow"..tier.."Talent"..(selectedTalent+1)]:Click()
+					attemptedColumn = selectedTalent+1
+					C_Timer.After(0.5, clearAttemptedColumn)
+					return selectedTalent+1
+				end
+			else
+				return TALENT_TOOLTIP_ADD_REST_ERROR
+			end
+		end
+	end
+	
+	function module:Backward()
+		if tier > 0 then
+			if IsResting() then
+				local __, selectedTalent = GetTalentTierInfo(tier, GetActiveSpecGroup())
+				if selectedTalent > 1 then
+					_G["PlayerTalentFrameTalentsTalentRow"..tier.."Talent"..(selectedTalent-1)]:Click()
+					attemptedColumn = selectedTalent-1
+					C_Timer.After(0.5, clearAttemptedColumn)
+					return selectedTalent-1
+				end
+			else
+				return TALENT_TOOLTIP_ADD_REST_ERROR
+			end
+		end
+	end
+
+	function module:Actions()
+		if tier > 1 then
+			local activeSpec = GetActiveSpecGroup()
+			local tierAvailable = GetTalentTierInfo(tier, activeSpec)
+			if tierAvailable then
+				local retVals = {}
+				for i=1, NUM_TALENT_COLUMNS do
+					tinsert(retVals, GetTalentInfo(tier, i, activeSpec))
+				end
+				return unpack(retVals)
+			end
+		end
+	end
+
+	function module:DoAction(index)
+		if tier > 0 and index <= NUM_TALENT_COLUMNS then
+			_G["PlayerTalentFrameTalentsTalentRow"..tier.."Talent"..index]:Click()
+			attemptedColumn = index
+			C_Timer.After(0.5, clearAttemptedColumn)
+			return index
+		end
+	end
+	
+	function module:RefreshEntry()
+		return tier > 0
+	end
+	
+	function module:GetEntryLongDescription()
+		local activeSpec = GetActiveSpecGroup()
+		local tierAvailable, selectedTalent, tierUnlockLevel = GetTalentTierInfo(tier, activeSpec)
+		if tierAvailable then
+			if selectedTalent and selectedTalent > 0 then
+				local __, __, __, __,__, spellID = GetTalentInfo(tier, selectedTalent, activeSpec)
+				self:getScanningTooltip():SetSpellByID(spellID)
+				return LEVEL_GAINED:format(tierUnlockLevel) .. CHAT_HEADER_SUFFIX .. self:readScanningTooltip()
+			else
+				return LEVEL_GAINED:format(tierUnlockLevel) .. CHAT_HEADER_SUFFIX .. LEVEL_UP_TALENT_MAIN
+			end
+		else
+			return PVP_TALENTS_BECOME_AVAILABLE_AT_LEVEL:format(tierUnlockLevel)
+		end
+	end
+	
+	module.frame:RegisterEvent("PLAYER_TALENT_UPDATE")
+	module.frame:HookScript("OnEvent", function()
+		if attemptedColumn and select(4, GetTalentInfo(tier, attemptedColumn, GetActiveSpecGroup())) then
+			attemptedColumn = nil
+			module:ttsInterruptExtended(module:GetEntryLongDescription())
+		end
+	end)
+	
 end
