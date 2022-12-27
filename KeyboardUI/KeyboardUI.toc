@@ -3,7 +3,7 @@
 ## Notes: Keyboard user interface with text to speech
 ## Author: Dahk Celes (DDCorkum), in partnership with RogueEugor (A. Agostino)
 ## X-License: All Rights Reserved
-## Version: 10.02
+## Version: 10.03
 ## SavedVariables: KeyboardUIOptions
 
 # Core addon and widgets
@@ -14,6 +14,6 @@ KeyboardUI_UIDropDownMenu.lua
 
 # Frames
 KeyboardUI_GameMenu.lua
-#KeyboardUI_Actions.lua
+KeyboardUI_Actions.lua
 KeyboardUI_QuestLog.lua
 KeyboardUI_Dialog.lua

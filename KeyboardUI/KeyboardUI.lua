@@ -19,8 +19,11 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+10.03 (2022-12-27) by Dahk Celes
+- Updated the spellbook and bags for Dragonflight
+
 10.02 (2022-11-20) by Dahk Celes
--Minor bugfixes
+- Minor bugfixes
 
 10.01 (2022-11-15) by Dahk Celes
 - Updates for Dragonflight
@@ -1001,34 +1004,70 @@ function lib:findPrevInTable(tbl, index, criteria)
 	end
 end
 
-local scanningTooltip = CreateFrame("GameTooltip", "KeyboardUIScanningTooltip", nil, "SharedTooltipTemplate")
-scanningTooltip:SetOwner(frame, "ANCHOR_NONE")
-local scanningTooltipLines = 1
+if C_TooltipInfo then
 
-scanningTooltip:SetScript("OnShow", function()
-	local line = _G["KeyboardUIScanningTooltipTextLeft"..scanningTooltipLines]
-	while line do
-		scanningTooltip[scanningTooltipLines*2 - 1] = line
-		scanningTooltip[scanningTooltipLines*2] = _G["KeyboardUIScanningTooltipTextRight"..scanningTooltipLines]
-		scanningTooltipLines = scanningTooltipLines + 1
-		line = _G["KeyboardUIScanningTooltipTextLeft"..scanningTooltipLines]
-	end
-end)
+	-- WoW 10.x
 
-function lib:getScanningTooltip()
-	scanningTooltip:ClearLines()
-	return scanningTooltip
-end
-
-function lib:readScanningTooltip()
-	local text = {}
-	for i=1, #scanningTooltip do
-		local line = scanningTooltip[i]:GetText()
-		if line and line ~= "" then
-			tinsert(text, line)
+	function lib:getTooltipData(kind, ...)
+		local tooltipData = C_TooltipInfo[kind](...)
+		TooltipUtil.SurfaceArgs(tooltipData)
+		for __, line in ipairs(tooltipData.lines) do
+			TooltipUtil.SurfaceArgs(line)
 		end
+		return tooltipData
 	end
-	return table.concat(text, ". ")
+
+	function lib:getTooltipLines(kind, ...)
+		local tooltipData = C_TooltipInfo[kind](...)
+		TooltipUtil.SurfaceArgs(tooltipData)
+		for __, line in ipairs(tooltipData.lines) do
+			TooltipUtil.SurfaceArgs(line)
+		end
+		return tooltipData.lines		
+	end
+	
+	function lib:concatTooltipLines(kind, ...)
+		local lines = self:getTooltipLines(kind, ...) or {}
+		for i=1, #lines do
+			lines[i] = lines[i].leftText or ""
+		end
+		return table.concat(lines, ". ")	
+	end
+
+else
+
+	-- Classic
+	
+	local scanningTooltip = CreateFrame("GameTooltip", "KeyboardUIScanningTooltip", nil, "SharedTooltipTemplate")
+	scanningTooltip:SetOwner(frame, "ANCHOR_NONE")
+	local scanningTooltipLines = 1
+
+	scanningTooltip:SetScript("OnShow", function()
+		local line = _G["KeyboardUIScanningTooltipTextLeft"..scanningTooltipLines]
+		while line do
+			scanningTooltip[scanningTooltipLines*2 - 1] = line
+			scanningTooltip[scanningTooltipLines*2] = _G["KeyboardUIScanningTooltipTextRight"..scanningTooltipLines]
+			scanningTooltipLines = scanningTooltipLines + 1
+			line = _G["KeyboardUIScanningTooltipTextLeft"..scanningTooltipLines]
+		end
+	end)
+
+	function lib:getScanningTooltip()
+		scanningTooltip:ClearLines()
+		return scanningTooltip
+	end
+
+	function lib:readScanningTooltip()
+		local text = {}
+		for i=1, #scanningTooltip do
+			local line = scanningTooltip[i]:GetText()
+			if line and line ~= "" then
+				tinsert(text, line)
+			end
+		end
+		return table.concat(text, ". ")
+	end
+
 end
 
 
