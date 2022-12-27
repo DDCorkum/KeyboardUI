@@ -124,8 +124,10 @@ function module:DoAction(index)
 	-- This can probably be replaced with nop() because of assertSecureKeybinds()
 	if currentPopup then
 		if index then
-			buttons[currentPopup][index]:Click()
-		elseif currentButton then
+			if buttons[currentPopup][index] and buttons[currentPopup][index]:IsShown() then
+				buttons[currentPopup][index]:Click()
+			end
+		elseif currentButton > 0 then
 			buttons[currentPopup][currentButton]:Click()
 		end
 	end
