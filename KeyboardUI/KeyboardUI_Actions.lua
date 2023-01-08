@@ -19,13 +19,14 @@ KeyboardUI_Actions.lua - Includes modules which must share access to the action 
 local KeyboardUI = select(2, ...)
 local L = KeyboardUI.text
 
-local action = 0								-- used by SpellBookFrame and ContainerFrame modules to place abilities and consumables on the action bar
-local bagID, bagSlot = BACKPACK_CONTAINER, 0	-- used by ContainerFrame and MerchantFrame modules to interact with the player inventory
-
 local moduleUsingActionBar = nil
 
 -------------------------
 -- Shared action bar management
+
+local moduleUsingActionBar = nil
+
+local action = 0								-- used by SpellBookFrame and ContainerFrame modules to place abilities and consumables on the action bar
 
 local function getActionText(optAction)
 	local action = optAction or action
@@ -267,36 +268,24 @@ do
 		moduleUsingActionbAr = nil
 	end
 
-	local function scanTooltip(id, bookType)
-		if C_TooltipInfo then
-			return module:concatTooltipLines("GetSpellBookItem", id, bookType)
-		else
-			module:getScanningTooltip():SetSpellBookItem(id, bookType)
-			return module:readScanningTooltip()
-		end
-	end
-
-	local scanTooltipByID = C_TooltipInfo and function(spellID) return module:concatTooltipLines(spellID) end
-		or function(spellID) module:getScanningTooltip():SetSpellByID(spellID) return module:readScanningTooltip() end
-
 	local function getEntryText(longDesc)
 		local slotWithOffset = book == 3 and slot or (slot + select(3, GetSpellTabInfo(tab)))
 		local bookType = book == 3 and BOOKTYPE_PET or BOOKTYPE_SPELL
 		local spellType, id = GetSpellBookItemInfo(slotWithOffset, bookType)
 		if flyout == 0 then
 			if spellType == "SPELL" then
-				return longDesc and scanTooltip(slotWithOffset, bookType) or GetSpellInfo(id)
+				return longDesc and module:concatTooltipLines("GetSpellBookItem", slotWithOffset, bookType) or GetSpellInfo(id)
 			elseif spellType == "FUTURESPELL" then
 				local name, __, __, __, minLevel = GetSpellInfo(id)
-				return longDesc and scanTooltip(slotWithOffset, bookType) or name .. " (" .. UNKNOWN .. ")."
+				return longDesc and module:concatTooltipLines("GetSpellBookItem", slotWithOffset, bookType) or name .. " (" .. UNKNOWN .. ")."
 			elseif spellType == "FLYOUT" then
-				return longDesc and scanTooltip(slotWithOffset, bookType) or "Collection of " .. GetFlyoutInfo(id) .. " abilities."
+				return longDesc and module:concatTooltipLines("GetSpellBookItem", slotWithOffset, bookType) or "Collection of " .. GetFlyoutInfo(id) .. " abilities."
 			elseif spellType == "PETACTION" then
-				return longDesc and scanTooltip(slotWithOffset, bookType) or GetSpellBookItemName(slotWithOffset, bookType)
+				return longDesc and module:concatTooltipLines("GetSpellBookItem", slotWithOffset, bookType) or GetSpellBookItemName(slotWithOffset, bookType)
 			end
 		else
 			local spellID = GetFlyoutSlotInfo(id, flyout)
-			return longDesc and scanTooltipByID(spellID) or GetSpellInfo(spellID)
+			return longDesc and module:concatTooltipLines("GetSpellByID", spellID) or GetSpellInfo(spellID)
 		end
 
 	end
@@ -661,14 +650,21 @@ do
 	end
 
 	-- temporary, to be merged into KeyboardUI_Actions.lua to include a tutorial on changing action bar slots
-	module:registerTutorial(function() return TutorialQueue and TutorialQueue.currentTutorial and (TutorialQueue.currentTutorial.spellToAdd or false) end,
+	module:registerTutorial(
+		function()
+			if UnitLevel("player") > 5 then
+				return nil
+			else
+				return TutorialQueue and TutorialQueue.currentTutorial and (TutorialQueue.currentTutorial.spellToAdd or false)
+			end
+		end,
 		{
 			function() return TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd and SpellBookFrame:IsShown() or L["PRESS_TO"]:format(GetBindingKey("TOGGLESPELLBOOK") or "", NPEV2_SPELLBOOK_ADD_SPELL:format(GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd))) end,
 			function() return TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd and slot > 0 or L["PRESS_TO"]:format(module:getOption("bindingNextEntryButton"), CHOOSE .. CHAT_HEADER_SUFFIX .. GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd)) end,
 			function() return TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd and action > 0 or L["PRESS_TO"]:format(module:getOption("bindingForwardButton"), CHOOSE .. CHAT_HEADER_SUFFIX .. BINDING_HEADER_ACTIONBAR) end,
 		}
 	)
-	
+
 
 	SpellBookSpellIconsFrame:Hide()
 	SpellBookSpellIconsFrame:HookScript("OnShow", function(self)
@@ -748,11 +744,221 @@ end
 
 
 -------------------------
+-- Shared bag management for ContainerFrame and MerchantFrame modules
+
+local moduleUsingBags = nil
+
+local itemLocation = ItemLocation:CreateFromBagAndSlot(BACKPACK_CONTAINER, 0)		-- used by ContainerFrame and MerchantFrame modules to interact with the player inventory
+
+local NUM_REAGENTBAG_SLOTS = NUM_REAGENTBAG_SLOTS or 0 -- classic vs retail
+
+local nextBagID, prevBagID = {}, {}
+
+itemLocation.IsValid = itemLocation.IsValid or function()
+	return GetContainerItemInfo(itemLocation.bagID, itemLocation.slotIndex) ~= nil
+end
+
+do
+	-- populating nextBagID and prevBagID
+	for i= BACKPACK_CONTAINER + 1, BACKPACK_CONTAINER + NUM_BAG_SLOTS + NUM_REAGENTBAG_SLOTS do
+		nextBagID[i-1] = i
+		prevBagID[i] = i-1
+	end
+	nextBagID[BACKPACK_CONTAINER + NUM_BAG_SLOTS + NUM_REAGENTBAG_SLOTS] = BANK_CONTAINER
+	prevBagID[BANK_CONTAINER] = BACKPACK_CONTAINER + NUM_BAG_SLOTS + NUM_REAGENTBAG_SLOTS
+	nextBagID[BANK_CONTAINER] = BACKPACK_CONTAINER + NUM_BAG_SLOTS + NUM_REAGENTBAG_SLOTS + 1
+	prevBagID[BACKPACK_CONTAINER + NUM_BAG_SLOTS + NUM_REAGENTBAG_SLOTS + 1] = BANK_CONTAINER
+	for i = BACKPACK_CONTAINER + NUM_BAG_SLOTS + NUM_REAGENTBAG_SLOTS + 2, BACKPACK_CONTAINER + NUM_BAG_SLOTS + NUM_REAGENTBAG_SLOTS + NUM_BANKBAGSLOTS do
+		nextBagID[i-1] = i
+		prevBagID[i] = i-1
+	end
+	if REAGENTBANK_CONTAINER then
+		-- retail
+		nextBagID[BACKPACK_CONTAINER + NUM_BAG_SLOTS + NUM_REAGENTBAG_SLOTS + NUM_BANKBAGSLOTS] = REAGENTBANK_CONTAINER
+		prevBagID[REAGENTBANK_CONTAINER] = BACKPACK_CONTAINER + NUM_BAG_SLOTS + NUM_REAGENTBAG_SLOTS + NUM_BANKBAGSLOTS
+	elseif KEYRING_CONTAINER then
+		-- classic
+		nextBagID[BACKPACK_CONTAINER + NUM_BAG_SLOTS + NUM_REAGENTBAG_SLOTS + NUM_BANKBAGSLOTS] = KEYRING_CONTAINER
+		prevBagID[KEYRING_CONTAINER] = BACKPACK_CONTAINER + NUM_BAG_SLOTS + NUM_REAGENTBAG_SLOTS + NUM_BANKBAGSLOTS
+	end
+end
+
+local function getBagAndSlot()
+	return itemLocation.bagID, itemLocation.slotIndex
+end
+
+local function setBagAndSlot(bagID, slotIndex)
+	itemLocation:SetBagAndSlot(bagID, slotIndex)
+end
+
+local containers = {ContainerFrame1, ContainerFrame2, ContainerFrame3, ContainerFrame4, ContainerFrame5, ContainerFrame6, ContainerFrame7, ContainerFrame8, ContainerFrame9, ContainerFrame10, ContainerFrame11, ContainerFrame12, ContainerFrame13}
+local function isBagShownForBagID(bagID)
+	if bagID >= BACKPACK_CONTAINER then
+		for __, bag in ipairs(containers) do
+			if bag:GetID() == bagID and bag:IsShown() then
+				return true
+			end
+		end
+		return false
+	elseif bagID == BANK_CONTAINER then
+		return BankFrame:IsShown()
+	elseif bagID == REAGENTBANK_CONTAINER then
+		return ReagentBankFrame:IsShown()
+	end
+end
+
+local function refreshBag()
+	local bagID = itemLocation.bagID
+	while bagID and not isBagShownForBagID(bagID) do
+		bagID = prevBagID[bagID]
+	end
+	if bagID == nil then
+		itemLocation:SetBagAndSlot(BACKPACK_CONTAINER, 0)
+		return false
+	elseif bagID ~= itemLocation.bagID then
+		itemLocation:SetBagAndSlot(bagID, 1)
+	else
+		local numberOfSlots = (GetContainerNumSlots or C_Container.GetContainerNumSlots)(bagID)
+		if itemLocation.slotIndex > numberOfSlots then
+			itemLocation.slotIndex = numberOfSlots
+		end
+	end
+	return true
+end
+
+local function nextBag()
+	refreshBag()
+	local bagID = nextBagID[itemLocation.bagID]
+	while bagID do
+		if isBagShownForBagID(bagID) then
+			local numberOfSlots = (GetContainerNumSlots or C_Container.GetContainerNumSlots)(bagID)
+			if numberOfSlots > 0 then
+				itemLocation:SetBagAndSlot(bagID, 1)
+				return true
+			end
+		end
+		bagID = nextBagID[bagID]
+	end
+	return false
+end
+
+local function prevBag()
+	refreshBag()
+	local bagID = prevBagID[itemLocation.bagID]
+	while bagID do
+		if isBagShownForBagID(bagID) then
+			local numberOfSlots = (GetContainerNumSlots or C_Container.GetContainerNumSlots)(bagID)
+			if numberOfSlots > 0 then
+				itemLocation:SetBagAndSlot(bagID, 1)
+				return true
+			end
+		end
+		bagID = prevBagID[bagID]
+	end
+	return false
+end
+
+local function nextBagSlot()
+	refreshBag()
+	if itemLocation.slotIndex < (GetContainerNumSlots or C_Container.GetContainerNumSlots)(itemLocation.bagID) then
+		itemLocation.slotIndex = itemLocation.slotIndex + 1
+		return true
+	end
+	return false
+end
+
+local function prevBagSlot()
+	refreshBag()
+	if itemLocation.slotIndex > 1 then
+		itemLocation.slotIndex = itemLocation.slotIndex - 1
+		return true
+	end
+	return false
+end
+
+local function getBagSlotTooltip()
+	if itemLocation:IsValid() then
+		return moduleUsingBags:concatTooltipLines("GetBagItem", getBagAndSlot())
+	end
+end
+
+local function getBagSlotText()
+	if itemLocation:IsValid() then
+		local itemID = C_Item.GetItemID(itemLocation)
+		local itemCount = GetContainerItemInfo and select(2, GetContainerItemInfo(getBagAndSlot())) or C_Item.GetStackCount(itemLocation)
+		local itemName, __, __, __, itemMinLevel, itemType, __, __, itemEquipLoc = GetItemInfo(itemID)
+		local itemQuality = C_Item.GetItemQuality(itemLocation)
+		local itemLevel = C_Item.GetCurrentItemLevel(itemLocation)
+		local redText = moduleUsingBags:getFirstRedTooltipLine("GetBagItem", getBagAndSlot())
+		if itemEquipLoc ~= "" and not redText then
+			local itemSlot1, itemSlot2 = invTypeToSlot[itemEquipLoc], (itemEquipLoc ~= "INVTYPE_WEAPON" or CanDualWield()) and invTypeToSlot2[itemEquipLoc] or nil
+			local oldItemID1, oldItemID2 = itemSlot1 and GetInventoryItemID("player", itemSlot1), itemSlot2 and GetInventoryItemID("player", itemSlot2)
+			if oldItemID1 and oldItemID2 then
+				local oldName1, __, oldQuality1, oldLevel1 = GetItemInfo(oldItemID1)
+				local oldName2, __, oldQuality2, oldLevel2 = GetItemInfo(oldItemID2)
+				return ("%s (%s, %s). %s (%s, %s) %s %s (%s, %s)"):format(
+					itemName,
+					_G["ITEM_QUALITY"..itemQuality.."_DESC"],
+					CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(itemLevel),
+					REPLACES_SPELL:format(oldName1),
+					_G["ITEM_QUALITY"..oldQuality1.."_DESC"],
+					CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(oldLevel1),
+					itemType == 4 and QUEST_LOGIC_OR or QUEST_LOGIC_AND,
+					oldName2,
+					_G["ITEM_QUALITY"..oldQuality2.."_DESC"],
+					CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(oldLevel2)
+				)				
+			elseif oldItemID1 or oldItemID2 then
+				local oldName, __, oldQuality, oldLevel = GetItemInfo(oldItemID1 or oldItemID2)
+				return ("%s (%s, %s). %s (%s, %s)"):format(
+					itemName,
+					_G["ITEM_QUALITY"..itemQuality.."_DESC"],
+					CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(itemLevel),
+					REPLACES_SPELL:format(oldName),
+					_G["ITEM_QUALITY"..oldQuality.."_DESC"],
+					CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(oldLevel)
+				)
+			else
+				return("%s (%s, %s)."):format(
+					itemName,
+					_G["ITEM_QUALITY"..itemQuality.."_DESC"],
+					CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(itemLevel)
+				)
+			end
+		elseif itemCount > 1 then
+			return ITEM_QUANTITY_TEMPLATE:format(itemCount, itemName)
+		elseif redText then
+			return itemName .. ". " .. MOUNT_JOURNAL_FILTER_UNUSABLE .. CHAT_HEADER_SUFFIX .. redText
+		else
+			return itemName
+		end
+	end	
+end
+
+local function getBagText()
+	local bagID = itemLocation.bagID
+	local numSlots = (GetContainerNumSlots or C_Container.GetContainerNumSlots)(bagID) -- classic vs retail
+	local numFreeSlots = (GetContainerNumFreeSlots or C_Container.GetContainerNumFreeSlots)(bagID) -- classic vs retail
+	if bagID == BACKPACK_CONTAINER then
+		return ("%s. %d of %d %s %s. %s"):format(BACKPACK_TOOLTIP, numFreeSlots, numSlots, BAGSLOTTEXT, EMPTY, getBagSlotText() or "")
+	elseif bagID <= BACKPACK_CONTAINER + NUM_BAG_SLOTS then
+		return ("%s %d. %d of %d %s %s. %s"):format(INVTYPE_BAG, bagID, numFreeSlots, numSlots, BAGSLOTTEXT, EMPTY, getBagSlotText() or "")
+	elseif bagID <= BACKPACK_CONTAINER + NUM_BAG_SLOTS + NUM_REAGENTBAG_SLOTS then
+		return ("%s. %d of %d %s %s. %s"):format(REAGENT_BANK, numFreeSlots, numSlots, BAGSLOTTEXT, EMPTY, getBagSlotText() or "")
+	else
+		return ("%s %s %d. %d of %d %s %s. %s"):format(BANK, INVTYPE_BAG, bagID - NUM_BAG_SLOTS - NUM_REAGENTBAG_SLOTS, numFreeSlots, numSlots, BAGSLOTTEXT, EMPTY, getBagSlotText() or "")
+	end
+end
+
+local function getBagSlotItemID()
+	return itemLocation:IsValid() and C_Item.GetItemID(itemLocation) or nil
+end
+
+
+-------------------------
 -- Backpack and bags without a merchant window
 
 do
-
-	local itemLoc = ItemLocation:CreateEmpty()	-- just a reusable table
 
 	local useActionSlots = false
 
@@ -767,8 +973,8 @@ do
 		frame = CreateFrame("Frame", nil, ContainerFrame1),
 		secureCommands =
 		{
-			bindingDoActionButton = GetContainerItemID and function() return useActionSlots == false and isUsable(GetContainerItemID(bagID, bagSlot)) and "ITEM " .. GetItemInfo(GetContainerItemID(bagID, bagSlot)) end
-				or function() return useActionSlots == false and isUsable(C_Container.GetContainerItemID(bagID, bagSlot)) and "ITEM " .. GetItemInfo(C_Container.GetContainerItemID(bagID, bagSlot)) end, -- classic vs retail
+			bindingDoActionButton = GetContainerItemID and function() return useActionSlots == false and isUsable(GetContainerItemID(getBagAndSlot())) and "ITEM " .. GetItemInfo(GetContainerItemID(getBagAndSlot())) end
+				or function() return useActionSlots == false and isUsable(C_Container.GetContainerItemID(getBagAndSlot())) and "ITEM " .. GetItemInfo(C_Container.GetContainerItemID(getBagAndSlot())) end, -- classic vs retail
 		},
 	}
 
@@ -776,30 +982,13 @@ do
 	
 	function module:GainFocus()
 		moduleUsingActionBar = self
+		moduleUsingBags = self
 	end
 	
 	function module:LoseFocus()
-		moduleUsingActionbAr = nil
-	end
-
-	local getRedTooltipText = C_TooltipInfo and function()
-		for __, line in ipairs(module:getTooltipLines("GetBagItem", bagID, bagSlot)) do
-			if line.leftColor.g < 0.2 and line.leftColor.b < 0.2 and line.leftColor.r > 0.9 then
-				return line.leftText
-			end
-		end
-	end or function()
-		local tooltip = module:getScanningTooltip()
-		tooltip:SetBagItem(bagID, bagSlot)
-		for __, fontString in ipairs(tooltip) do
-			local r, g, b = fontString:GetTextColor()
-			local text = fontString:GetText()
-			if text and text ~= "" and g < 0.2 and b < 0.2 and r > 0.9 then
-				return text
-			end
-		end	
-	end
-	
+		moduleUsingActionBar = nil
+		moduleUsingBags = nil
+	end	
 	
 	invTypeToSlot =
 	{
@@ -840,145 +1029,49 @@ do
 		INVTYPE_WEAPON = INVSLOT_OFFHAND,
 	}
 	
-	
-	local function getCountAndName()
-		local tbl = GetContainerItemInfo and {GetContainerItemInfo(bagID, bagSlot)} or C_Container.GetContainerItemInfo(bagID, bagSlot) -- classic vs retail
-		local itemID = tbl and (tbl.itemID or tbl[10])
-		if itemID then
-			local itemCount = tbl.stackCount or tbl[2]
-			local itemName, __, __, __, itemMinLevel, itemType, __, __, itemEquipLoc = GetItemInfo(itemID)
-			itemLoc:SetBagAndSlot(bagID, bagSlot)
-			local itemQuality = C_Item.GetItemQuality(itemLoc)
-			local itemLevel = C_Item.GetCurrentItemLevel(itemLoc)
-			local redText = getRedTooltipText()
-			if itemEquipLoc ~= "" and not redText then
-				local itemSlot1, itemSlot2 = invTypeToSlot[itemEquipLoc], (itemEquipLoc ~= "INVTYPE_WEAPON" or CanDualWield()) and invTypeToSlot2[itemEquipLoc] or nil
-				local oldItemID1, oldItemID2 = itemSlot1 and GetInventoryItemID("player", itemSlot1), itemSlot2 and GetInventoryItemID("player", itemSlot2)
-				if oldItemID1 and oldItemID2 then
-					local oldName1, __, oldQuality1, oldLevel1 = GetItemInfo(oldItemID1)
-					local oldName2, __, oldQuality2, oldLevel2 = GetItemInfo(oldItemID2)
-					return ("%s (%s, %s). %s (%s, %s) %s %s (%s, %s)"):format(
-						itemName,
-						_G["ITEM_QUALITY"..itemQuality.."_DESC"],
-						CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(itemLevel),
-						REPLACES_SPELL:format(oldName1),
-						_G["ITEM_QUALITY"..oldQuality1.."_DESC"],
-						CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(oldLevel1),
-						itemType == 4 and QUEST_LOGIC_OR or QUEST_LOGIC_AND,
-						oldName2,
-						_G["ITEM_QUALITY"..oldQuality2.."_DESC"],
-						CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(oldLevel2)
-					)				
-				elseif oldItemID1 or oldItemID2 then
-					local oldName, __, oldQuality, oldLevel = GetItemInfo(oldItemID1 or oldItemID2)
-					return ("%s (%s, %s). %s (%s, %s)"):format(
-						itemName,
-						_G["ITEM_QUALITY"..itemQuality.."_DESC"],
-						CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(itemLevel),
-						REPLACES_SPELL:format(oldName),
-						_G["ITEM_QUALITY"..oldQuality.."_DESC"],
-						CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(oldLevel)
-					)
-				else
-					return("%s (%s, %s)."):format(
-						itemName,
-						_G["ITEM_QUALITY"..itemQuality.."_DESC"],
-						CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(itemLevel)
-					)
-				end
-			elseif itemCount > 1 then
-				return ITEM_QUANTITY_TEMPLATE:format(itemCount, itemName)
-			elseif redText then
-				return itemName .. ". " .. MOUNT_JOURNAL_FILTER_UNUSABLE .. CHAT_HEADER_SUFFIX .. redText
-			else
-				return itemName
-			end
-		end
-	end
-
 	function module:NextGroup()
-		for i=bagID+1, BACKPACK_CONTAINER + (CharacterReagentBag0Slot and 5 or 4) do
-			local numberOfSlots = (GetContainerNumSlots or C_Container.GetContainerNumSlots)(i)
-			if numberOfSlots > 0 then
-				bagID, bagSlot = i, 1
-				useActionSlots = false
-				self:updatePriorityKeybinds()
-				local numberOfFreeSlots, bagType = (GetContainerNumFreeSlots or C_Container.GetContainerNumFreeSlots)(i) -- classic vs retail
-				if bagID == BACKPACK_CONTAINER then
-					return ("%s. %d of %d %s %s. %s"):format(BACKPACK_TOOLTIP, numberOfFreeSlots, numberOfSlots, BAGSLOTTEXT, EMPTY, getCountAndName() or "")
-				elseif bagID == 5 then
-					return ("%s. %d of %d %s %s. %s"):format(REAGENT_BANK, numberOfFreeSlots, numberOfSlots, BAGSLOTTEXT, EMPTY, getCountAndName() or "")
-				else
-					return ("%s %d. %d of %d %s %s. %s"):format(INVTYPE_BAG, bagID, numberOfFreeSlots, numberOfSlots, BAGSLOTTEXT, EMPTY, getCountAndName() or "")
-				end
-			end
+		if nextBag() then
+			useActionSlots = false
+			self:updatePriorityKeybinds()
+			return getBagText()
 		end
 	end
 
 	function module:PrevGroup()
-		for i=bagID-1, BACKPACK_CONTAINER, -1 do
-			local numberOfSlots = (GetContainerNumSlots or C_Container.GetContainerNumSlots)(i)
-			if numberOfSlots > 0 then
-				bagID, bagSlot = i, 1
-				useActionSlots = false
-				self:updatePriorityKeybinds()
-				local numberOfFreeSlots, bagType = (GetContainerNumFreeSlots or C_Container.GetContainerNumFreeSlots)(i) -- classic vs retail
-				if bagID == BACKPACK_CONTAINER then
-					return ("%s. %d of %d %s %s. %s"):format(BACKPACK_TOOLTIP, numberOfFreeSlots, numberOfSlots, BAGSLOTTEXT, EMPTY, getCountAndName() or "")
-				else
-					return ("%s %d. %d of %d %s %s. %s"):format(INVTYPE_BAG, bagID, numberOfFreeSlots, numberOfSlots, BAGSLOTTEXT, EMPTY, getCountAndName() or "")
-				end
-			end
+		if prevBag() then
+			useActionSlots = false
+			self:updatePriorityKeybinds()
+			return getBagText()
 		end
 	end
 
 	function module:NextEntry()
-		if bagSlot < (GetContainerNumSlots or C_Container.GetContainerNumSlots)(bagID) then
-			bagSlot = bagSlot + 1
+		if nextBagSlot() then
 			useActionSlots = false
 			self:updatePriorityKeybinds()
-			return bagSlot .. "; " .. (getCountAndName() or EMPTY)
-			
+			return getBagSlotText()
 		end
 	end
 
 	function module:PrevEntry()
-		if bagSlot > 1 then
-			bagSlot = bagSlot - 1
+		if prevBagSlot() then
 			useActionSlots = false
 			self:updatePriorityKeybinds()
-			return bagSlot .. "; " .. (getCountAndName() or EMPTY)
+			return getBagSlotText()
 		end
 	end
 
 	function module:RefreshEntry()
-		local numSlots = (GetContainerNumSlots or C_Container.GetContainerNumSlots)(bagID)
-		if bagSlot > numSlots then
-			bagSlot = numSlots
-			useActionSlots = false
-			self:updatePriorityKeybinds()
-		end
-		if bagSlot == 0 then
-			bagID = BACKPACK_CONTAINER
-			useActionSlots = false
-			self:updatePriorityKeybinds()
-		end
-		return bagSlot > 0
+		refreshBag()
+		return itemLocation.slotIndex ~= 0
 	end
 
 	function module:GetEntryLongDescription()
-		if self:RefreshEntry() then
-			if C_TooltipInfo then
-				return self:concatTooltipLines("GetBagItem", bagID, bagSlot)
-			else
-				self:getScanningTooltip():SetBagItem(bagID, bagSlot)
-				return self:readScanningTooltip()
-			end
-		end
+		return getBagSlotTooltip()
 	end
 
 	function module:Forward()
-		local itemID = GetContainerItemInfo and select(10, GetContainerItemInfo(bagID, bagSlot)) or C_Container.GetContainerItemInfo(bagID, bagSlot).itemID
+		local itemID = GetContainerItemInfo and select(10, GetContainerItemInfo(getBagAndSlot())) or C_Container.GetContainerItemInfo(getBagAndSlot()).itemID
 		if useActionSlots then
 			return nextActionSlot(isUsable(itemID))
 		else
@@ -989,18 +1082,18 @@ do
 	end
 
 	function module:Backward()
-			local itemID = GetContainerItemInfo and select(10, GetContainerItemInfo(bagID, bagSlot)) or C_Container.GetContainerItemInfo(bagID, bagSlot).itemID
-			if useActionSlots then
-				return prevActionSlot(isUsable(itemID))
-			else
-				useActionSlots = true
-				self:updatePriorityKeybinds()
-				return action == 0 and prevActionSlot(isUsable(itemID)) or itemID and HasAction(action) and REPLACES_SPELL:format(getActionText()) or getActionText()
-			end
+		local itemID = GetContainerItemInfo and select(10, GetContainerItemInfo(getBagAndSlot())) or C_Container.GetContainerItemInfo(getBagAndSlot()).itemID
+		if useActionSlots then
+			return prevActionSlot(isUsable(itemID))
+		else
+			useActionSlots = true
+			self:updatePriorityKeybinds()
+			return action == 0 and prevActionSlot(isUsable(itemID)) or itemID and HasAction(action) and REPLACES_SPELL:format(getActionText()) or getActionText()
+		end
 	end
 
 	function module:Actions()
-		local itemID = GetContainerItemInfo and select(10, GetContainerItemInfo(bagID, bagSlot)) or C_Container.GetContainerItemInfo(bagID, bagSlot).itemID
+		local itemID = GetContainerItemInfo and select(10, GetContainerItemInfo(getBagAndSlot())) or C_Container.GetContainerItemInfo(getBagAndSlot()).itemID
 		return getAllActionSlotTexts(isUsable(itemID))
 	end
 
@@ -1011,13 +1104,17 @@ do
 			self:updatePriorityKeybinds()
 			return module:DoAction()
 		end
+
+		local itemID = getBagSlotItemID()
 		
-		local itemID = GetContainerItemInfo and select(10, GetContainerItemInfo(bagID, bagSlot)) or C_Container.GetContainerItemInfo(bagID, bagSlot).itemID
 		if not itemID then
 			return
 		end
 		
-		local redText = getRedTooltipText()
+		local itemLoc = ItemLocation:CreateEmpty()	-- just a reusable table
+		local bagID, bagSlot = getBagAndSlot()
+		
+		local redText = module:getFirstRedTooltipLine("GetBagItem", itemLocation.bagID, itemLocation.slotIndex)
 		if redText then
 			PlayVocalErrorSoundID(51)
 			return ("<speak><silence msec=\"2000\" />%s</speak>"):format(ITEM_REQ_SKILL:format(redText))
@@ -1075,7 +1172,7 @@ do
 	end)
 	
 	MerchantFrame:HookScript("OnHide", function()
-		if not SpellBookFrame:IsShown() then
+		if not SpellBookFrame:IsShown() and not GossipFrame:IsShown() then
 			module.frame:Show()
 		end
 	end)
@@ -1085,10 +1182,21 @@ do
 	end)
 	
 	SpellBookFrame:HookScript("OnHide", function()
-		if not MerchantFrame:IsShown() then
+		if not MerchantFrame:IsShown() and not GossipFrame:IsShown() then
 			module.frame:Show()
 		end
 	end)
+	
+	GossipFrame:HookScript("OnShow", function()
+		module.frame:Hide()
+	end)
+	
+	GossipFrame:HookScript("OnHide", function()
+		if not SpellBookFrame:IsShown() and not MerchantFrame:IsShown() then
+			module.frame:Show()
+		end	
+	end)
+	
 end
 
 
@@ -1096,6 +1204,13 @@ end
 -- MerchantFrame
 
 do
+	local merchantSlot = 0
+	local merchantPage = 0
+	local numToBuy = 0
+	local buybackSlot = nil		-- nil/false when the buyback frame is closed, 0 when openned, and the slot number starting at 1 when an item is chosen for buyback
+	local sellMode = false
+	
+
 	local module =
 	{
 		name = "MerchantFrame",
@@ -1103,8 +1218,292 @@ do
 		frame = CreateFrame("Frame", nil, MerchantFrame),
 	}
 	
-	-- NYI
-	--KeyboardUI:RegisterModule(module)
+	KeyboardUI:RegisterModule(module)
+	
+	local AUCTION_HOUSE_SELL_TAB = AUCTION_HOUSE_SELL_TAB or "Sell"
+	local AUCTION_HOUSE_BUY_TAB = AUCTION_HOUSE_SELL_TAB or "Buy"
+
+	local function getMerchantSlotText()
+		if sellMode then
+			refreshBag()
+			if select(2, getBagAndSlot()) > 0 then
+				local text = getBagSlotText()
+				if text then
+					return ("%s %s"):format(AUCTION_HOUSE_SELL_TAB, text)
+				else
+					return (EMPTY)
+				end
+			end
+		elseif buybackSlot then
+			if buybackSlot > 0 then
+				name, __, price, quantity = GetBuybackItemInfo(buybackSlot)
+				if quantity > 1 then
+					return ("%s %s %s, %s"):format(BUYBACK, quantity, name, GetCoinText(price))
+				else
+					return ("%s %s, %s"):format(BUYBACK, name, GetCoinText(price))
+				end
+			end
+		elseif merchantSlot > 0 then
+			local name, __, price, quantity, numAvailable, isPurchasable, isUsable, extendedCost = GetMerchantItemInfo(merchantSlot)
+			local text = 
+				numToBuy > 0 and ("%d %s; %s"):format(numToBuy, name, GetCoinText(price*numToBuy/quantity))
+				or isPurchasable and ("%s; %s%s"):format(name, COSTS_LABEL, GetCoinText(price/quantity))
+				or ("%s. %s"):format(name, UNAVAILABLE)
+			if numToBuy == 0 and numAvailable > 0 then
+				text = text .. "; " .. (AUCTION_HOUSE_QUANTITY_AVAILABLE_FORMAT and AUCTION_HOUSE_QUANTITY_AVAILABLE_FORMAT:format(numAvailable) or (numAvailable .. " " .. AVAILABLE))
+			end
+			if not isUsable then
+				local redText = module:getFirstRedTooltipLine("GetMerchantItem", merchantSlot)
+				if redText then
+					text = text .. " (" .. redText .. " )"
+				end
+			end
+			return text
+		end
+		return ""
+	end
+		
+	hooksecurefunc("MerchantFrame_Update", function()
+		if MerchantFrame.selectedTab == 1 then
+			buybackSlot = nil
+			if MerchantFrame.page > merchantPage then
+				merchantPage = MerchantFrame.page
+				if merchantPage > 1 then
+					merchantSlot = MERCHANT_ITEMS_PER_PAGE * (merchantPage - 1) + 1
+				end
+				numToBuy = 0
+				if module:hasFocus() then
+					module:ttsInterrupt(getMerchantSlotText())
+				end
+			elseif MerchantFrame.page < merchantPage then
+				merchantPage = MerchantFrame.page
+				merchantSlot = MERCHANT_ITEMS_PER_PAGE * merchantPage
+				numToBuy = 0
+				if module:hasFocus() then
+					module:ttsInterrupt(getMerchantSlotText())
+				end
+			end
+		else
+			sellMode = false
+			buybackSlot = 0
+		end
+	end)
+	
+	function module:GainFocus()
+		moduleUsingBags = self
+		sellMode = false
+		merchantSlot = 0
+	end
+	
+	function module:LoseFocus()
+		moduleUsingBags = nil
+	end
+	
+	function module:ChangeTab()
+		if buybackSlot then
+			MerchantFrameTab1:Click()
+			return AUCTION_HOUSE_BUY_TAB
+		elseif sellMode then
+			MerchantFrameTab2:Click()
+			return BUYBACK
+		else
+			sellMode = true
+			return AUCTION_HOUSE_SELL_TAB
+		end
+	end
+	
+	function module:NextGroup()
+		if sellMode then
+			if nextBag() then
+				return getMerchantSlotText()
+			end
+		else
+			return self:NextEntry()
+		end
+	end
+	
+	function module:PrevGroup()
+		if sellMode then
+			if prevBag() then
+				return getMerchantSlotText()
+			end
+		else
+			return self:PrevEntry()
+		end
+	end
+	
+	function module:NextEntry()
+		if sellMode then
+			if nextBagSlot() then
+				return getMerchantSlotText()
+			end
+		elseif buybackSlot then
+			if buybackSlot < BUYBACK_ITEMS_PER_PAGE and buybackSlot < GetNumBuybackItems() then
+				buybackSlot = buybackSlot + 1
+				return getMerchantSlotText()
+			end
+		elseif merchantSlot < GetMerchantNumItems() then
+			if merchantSlot % MERCHANT_ITEMS_PER_PAGE ~= 0 or merchantSlot == 0 then
+				merchantSlot = merchantSlot + 1
+				numToBuy = 0
+				return getMerchantSlotText()
+			else
+				MerchantNextPageButton:Click()
+			end
+		end
+	end
+	
+	function module:PrevEntry()
+		if sellMode then
+			if prevBagSlot() then
+				return getMerchantSlotText()
+			end
+		elseif buybackSlot then
+			if buybackSlot > 1 then
+				buybackSlot = buybackSlot - 1
+			end
+		elseif merchantSlot > 1 then
+			if merchantSlot % MERCHANT_ITEMS_PER_PAGE ~= 1 then
+				merchantSlot = merchantSlot - 1
+				numToBuy = 0
+				return getMerchantSlotText()
+			else
+				MerchantPrevPageButton:Click()
+			end		
+		end
+	end
+	
+	function module:Refresh()
+		if sellMode then
+			return refreshBag()
+		elseif buybackSlot then
+			buybackSlot = min(buybackSlot, GetNumBuybackItems())
+			return buybackSlot > 0
+		elseif merchantSlot > GetMerchantNumItems() then
+			merchantSlot = GetMerchantNumItems()
+			numToBuy = 0
+			return merchantSlot > 0
+		end
+	end
+	
+	function module:GetEntryLongDescription()
+		if sellMode then
+			return getBagSlotTooltip()
+		elseif buybackSlot then
+			if buybackSlot > 0 then
+				return module:concatTooltipLines("GetBuybackItem", buybackSlot)
+			end
+		elseif numToBuy > 0 then
+			return numToBuy .. " " .. module:concatTooltipLines("GetMerchantItem", merchantSlot)
+		else
+			return module:concatTooltipLines("GetMerchantItem", merchantSlot)
+		end
+	end
+	
+	function module:Forward()
+		if not buybackSlot then
+			local numAvail, isPurchasable = select(5, GetMerchantItemInfo(merchantSlot))
+			if isPurchasable then
+				numToBuy = min(numToBuy+1, GetMerchantItemMaxStack(merchantSlot), numAvail == -1 and 1000 or numAvail)
+				return getMerchantSlotText()
+			end
+		end
+	end
+	
+	function module:Backward()
+		if not buybackSlot then
+			local numAvail, isPurchasable = select(5, GetMerchantItemInfo(merchantSlot))
+			if isPurchasable then
+				numToBuy = min(numToBuy>1 and numToBuy-1 or 1, GetMerchantItemMaxStack(merchantSlot), numAvail == -1 and 1000 or numAvail)
+				return getMerchantSlotText()
+			end
+		end
+	end
+	
+	local actionSizes =
+	{
+		[1] = 1,
+		[2] = 2,
+		[3] = 3,
+		[4] = 4,
+		[5] = 5,
+		[6] = 10,
+		[7] = 20,
+		[8] = 50,
+		[9] = 100,
+		[10] = 200,
+		[11] = 500,
+		[12] = 1000,
+	}
+	
+	function module:DoAction(action)
+		if sellMode then
+			if itemLocation:IsValid() then
+				(UseContainerItem and UseContainerItem or C_Container.UseContainerItem)(getBagAndSlot())
+				return "Sold"	
+			end
+		elseif buybackSlot then
+			if buybackSlot > 0 then
+				BuybackItem(buybackSlot)
+			end
+		elseif action then
+			local numAvail, isPurchasable = select(5, GetMerchantItemInfo(merchantSlot))
+			if isPurchasable then
+				if GetMerchantItemMaxStack(merchantSlot) >= actionSizes[action] and (numAvail == -1 or numAvail >= actionSizes[action]) then
+					numToBuy = actionSizes[action]
+					return getMerchantSlotText()
+				end
+			else
+				return UNAVAILABLE
+			end
+		elseif numToBuy > 0 then
+			BuyMerchantItem(merchantSlot, numToBuy)
+			numToBuy = 0
+			return BLIZZARD_STORE_PURCHASED or "Purchased"
+		end
+	end
+	
+	function module:Actions()
+		if buybackSlot then
+			-- for now, do nothing
+		else
+			local numAvail, isPurchasable = select(5, GetMerchantItemInfo(merchantSlot))
+			if isPurchasable then
+				local tbl = {}
+				for i, size in ipairs(actionSizes) do
+					if GetMerchantItemMaxStack(merchantSlot) >= size and (numAvail == -1 or numAvail >= size) then
+						tbl[i] = AUCTION_HOUSE_BUY_TAB .. " " .. size
+					end
+				end
+				return unpack(tbl)
+			end
+		end	
+	end
+	
+	
+	local quest = UnitFactionGroup("player") == "Alliance" and 55194 or 59950
+	local function nopButTrue() return true end
+	local tutorialStep = 0
+	module:registerTutorial(
+		function() 
+			if UnitLevel("player") > 10 or C_QuestLog.IsQuestFlaggedCompleted(quest) then
+				return nil
+			else
+				return C_QuestLog.IsOnQuest(quest)
+			end
+		end,
+		{
+			function() if tutorialStep > 1 then return true else tutorialStep = 1 end if MerchantFrame:IsShown() then return merchantSlot > 0 or L["PRESS_TO"]:format(module:getOption("bindingNextEntryButton") .. " " .. QUEST_LOGIC_AND .. " " .. module:getOption("bindingPrevEntryButton"), BROWSE) else return false end end,
+			function() if tutorialStep > 2 then return true else tutorialStep = 2 end return numToBuy > 0 or L["PRESS_TO"]:format(module:getOption("bindingForwardButton") .. " " .. QUEST_LOGIC_AND .. " " .. module:getOption("bindingBackwardButton"), CHOOSE) end,
+			function() if tutorialStep > 3 then return true else tutorialStep = 3 end return numToBuy == 0 or L["PRESS_TO"]:format(module:getOption("bindingDoActionButton"), AUCTION_HOUSE_BUY_TAB) end,
+			function() if tutorialStep > 4 then return true else tutorialStep = 4 end return sellMode or L["PRESS_TO"]:format(module:getOption("bindingChangeTabButton"), AUCTION_HOUSE_SELL_TAB) end,
+			function() if tutorialStep > 5 then return true else tutorialStep = 5 end return select(2,getBagAndSlot()) > 1 or L["PRESS_TO"]:format(module:getOption("bindingNextEntryButton"), CHOOSE) end,
+			function() if tutorialStep >= 6 then return true else tutorialStep = 6 end return L["PRESS_TO"]:format(module:getOption("bindingDoActionButton"), AUCTION_HOUSE_SELL_TAB) end,
+			function() if tutorialStep > 7 then return true else tutorialStep = 7 end return buybackSlot or L["PRESS_TO"]:format(module:getOption("bindingChangeTabButton"), BUYBACK) end,
+			function() tutorialStep = 8 return not buybackSlot or L["PRESS_TO"]:format(module:getOption("bindingChangeTabButton"), AUCTION_HOUSE_BUY_TAB) end,
+		}	
+	)
+	
 end
 
 
@@ -1331,12 +1730,7 @@ if false then -- not yet updated for WoW 10.x --  WOW_PROJECT_ID == WOW_PROJECT_
 		if tierAvailable then
 			if selectedTalent and selectedTalent > 0 then
 				local __, __, __, __,__, spellID = GetTalentInfo(tier, selectedTalent, activeSpec)
-				if C_TooltipInfo then
-					return LEVEL_GAINED:format(tierUnlockLevel) .. CHAT_HEADER_SUFFIX .. self:concatTooltipLines("GetSpellByID", spellID)
-				else
-					self:getScanningTooltip():SetSpellByID(spellID)
-					return LEVEL_GAINED:format(tierUnlockLevel) .. CHAT_HEADER_SUFFIX .. self:readScanningTooltip()
-				end
+				return LEVEL_GAINED:format(tierUnlockLevel) .. CHAT_HEADER_SUFFIX .. self:concatTooltipLines("GetSpellByID", spellID)
 			else
 				return LEVEL_GAINED:format(tierUnlockLevel) .. CHAT_HEADER_SUFFIX .. LEVEL_UP_TALENT_MAIN
 			end

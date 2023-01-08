@@ -19,6 +19,9 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+10.04 (2023-01-08) by Dahk Celes
+- Buy, sell and buyback at merchants
+
 10.03 (2022-12-27) by Dahk Celes
 - Updated the spellbook and bags for Dragonflight
 
@@ -879,7 +882,12 @@ CreateFrame("Button", "KeyboardUIActionsButton"):SetScript("OnClick", function()
 			if actions[i] and actions[i] ~= "" then
 				local keybind = module:getOption("bindingDoAction"..i.."Button")
 				if keybind then
-					module:ttsQueue(keybind .. CHAT_HEADER_SUFFIX .. actions[i])
+					if keybind:sub(-2, -1) == "--" then
+						keybind = keybind:sub(1, -3) .. "-dash"
+					elseif keybind:sub(-2, -1) == "-=" then
+						keybind = keybind:sub(1, -3) .. "-equals"
+					end
+					module:ttsQueue(keybind .. actions[i])
 				end
 			end 
 		end
@@ -1004,18 +1012,13 @@ function lib:findPrevInTable(tbl, index, criteria)
 	end
 end
 
+
+-------------
+
+
+
+
 if C_TooltipInfo then
-
-	-- WoW 10.x
-
-	function lib:getTooltipData(kind, ...)
-		local tooltipData = C_TooltipInfo[kind](...)
-		TooltipUtil.SurfaceArgs(tooltipData)
-		for __, line in ipairs(tooltipData.lines) do
-			TooltipUtil.SurfaceArgs(line)
-		end
-		return tooltipData
-	end
 
 	function lib:getTooltipLines(kind, ...)
 		local tooltipData = C_TooltipInfo[kind](...)
@@ -1023,51 +1026,49 @@ if C_TooltipInfo then
 		for __, line in ipairs(tooltipData.lines) do
 			TooltipUtil.SurfaceArgs(line)
 		end
-		return tooltipData.lines		
-	end
-	
-	function lib:concatTooltipLines(kind, ...)
-		local lines = self:getTooltipLines(kind, ...) or {}
-		for i=1, #lines do
-			lines[i] = lines[i].leftText or ""
-		end
-		return table.concat(lines, ". ")	
+		return tooltipData.lines
 	end
 
 else
 
-	-- Classic
-	
+	-- classic compatibility
 	local scanningTooltip = CreateFrame("GameTooltip", "KeyboardUIScanningTooltip", nil, "SharedTooltipTemplate")
 	scanningTooltip:SetOwner(frame, "ANCHOR_NONE")
-	local scanningTooltipLines = 1
 
-	scanningTooltip:SetScript("OnShow", function()
-		local line = _G["KeyboardUIScanningTooltipTextLeft"..scanningTooltipLines]
-		while line do
-			scanningTooltip[scanningTooltipLines*2 - 1] = line
-			scanningTooltip[scanningTooltipLines*2] = _G["KeyboardUIScanningTooltipTextRight"..scanningTooltipLines]
-			scanningTooltipLines = scanningTooltipLines + 1
-			line = _G["KeyboardUIScanningTooltipTextLeft"..scanningTooltipLines]
+	function lib:getTooltipLines(kind, ...)
+		kind = "Set" .. kind:sub(4)
+		scanningTooltip[kind](scanningTooltip, ...)
+		local lines = {}
+		local i = 1
+		while _G["KeyboardUIScanningTooltipTextLeft" .. i] do
+			lines[i] =
+			{
+				leftText =_G["KeyboardUIScanningTooltipTextLeft" .. i]:GetText(),
+				rightText = _G["KeyboardUIScanningTooltipTextRight" .. i]:GetText(),
+				leftColor = CreateColor(_G["KeyboardUIScanningTooltipTextLeft" .. i]:GetTextColor()),
+				leftColor = CreateColor(_G["KeyboardUIScanningTooltipTextRight" .. i]:GetTextColor()),
+			}
+			i = i+1
 		end
-	end)
-
-	function lib:getScanningTooltip()
-		scanningTooltip:ClearLines()
-		return scanningTooltip
+		return lines
 	end
+end
 
-	function lib:readScanningTooltip()
-		local text = {}
-		for i=1, #scanningTooltip do
-			local line = scanningTooltip[i]:GetText()
-			if line and line ~= "" then
-				tinsert(text, line)
-			end
+function lib:concatTooltipLines(kind, ...)
+	local lines = self:getTooltipLines(kind, ...) or {}
+	for i=1, #lines do
+		lines[i] = lines[i].leftText or ""
+	end
+	return table.concat(lines, ". ")	
+end
+
+function lib:getFirstRedTooltipLine(kind, ...)
+	local lines = self:getTooltipLines(kind, ...)
+	for i=1, #lines do
+		if lines[i].leftColor.g < 0.2 and lines[i].leftColor.b < 0.2 and lines[i].leftColor.r > 0.9 and lines[i].leftText and lines[i].leftText ~= "" then
+			return lines[i].leftText
 		end
-		return table.concat(text, ". ")
 	end
-
 end
 
 
@@ -1636,7 +1637,7 @@ local currentTutorialMsg, currentTutorialMsgTime = nil, 0
 
 
 local function playTutorial()
-	C_Timer.After(2, playTutorial)
+	C_Timer.After(0.5, playTutorial)
 	currentTutorial = currentTutorial or startNextTutorial()
 	if currentTutorial then
 		for i=1, #currentTutorial do
@@ -1671,7 +1672,7 @@ lib:onEvent("PLAYER_LOGIN", function()
 		}
 	)
 
-	C_Timer.After(10, function()
+	C_Timer.After(7.5, function()
 		if not startNextTutorial() and UnitLevel("player") <= 30 then
 			lib:ttsQueue("For help with Keyboard UI, type: slash, K, U, I.", KUI_NORMAL, KUI_PP, true)
 		end
