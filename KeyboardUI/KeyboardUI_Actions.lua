@@ -265,7 +265,7 @@ do
 	end
 	
 	function module:LoseFocus()
-		moduleUsingActionbAr = nil
+		moduleUsingActionBar = nil
 	end
 
 	local function getEntryText(longDesc)
@@ -935,6 +935,31 @@ local function getBagSlotText()
 	end	
 end
 
+local function getBagShortTitle()
+	local bagID = itemLocation.bagID
+	if bagID == BACKPACK_CONTAINER then
+		return BAG_NAME_BACKPACK or "Backpack"
+	elseif bagID > BACKPACK_CONTAINER then
+		if bagID <= BACKPACK_CONTAINER + NUM_BAG_SLOTS then
+			local num = bagID-BACKPACK_CONTAINER
+			return _G["BAG_NAME_BAG_"..num] or (BAGSLOT .. " " .. num)
+		elseif bagID <= BACKPACK_CONTAINER + NUM_BAG_SLOTS + NUM_REAGENTBAG_SLOTS then
+			return MINIMAP_TRACKING_VENDOR_REAGENT or "Reagents"
+		elseif bagID == BANK_CONTAINER then
+			return BANK
+		else
+			local num = bagID - BANK_CONTAINER
+			return BANK_BAG .. " " .. num
+		end
+	elseif KEYRING_CONTAINER and bagID == KEYRING_CONTAINER then
+		return KEYRING or "Key Ring"
+	elseif REAGENTBANK_CONTAINER and bagID == REAGENTBANK_CONTAINER then
+		return REAGENT_BANK or "Reagent Bank"
+	else
+		return UNKNOWN or "Unknown"
+	end
+end
+
 local function getBagText()
 	local bagID = itemLocation.bagID
 	local numSlots = (GetContainerNumSlots or C_Container.GetContainerNumSlots)(bagID) -- classic vs retail
@@ -1049,7 +1074,7 @@ do
 		if nextBagSlot() then
 			useActionSlots = false
 			self:updatePriorityKeybinds()
-			return getBagSlotText()
+			return getBagSlotText() or ("%s %d, %s"):format(AUCTION_HOUSE_HEADER_ITEM, select(2, getBagAndSlot()), EMPTY)
 		end
 	end
 
@@ -1057,7 +1082,7 @@ do
 		if prevBagSlot() then
 			useActionSlots = false
 			self:updatePriorityKeybinds()
-			return getBagSlotText()
+			return getBagSlotText() or ("%s %d, %s"):format(AUCTION_HOUSE_HEADER_ITEM, select(2, getBagAndSlot()), EMPTY)
 		end
 	end
 
@@ -1221,7 +1246,7 @@ do
 	KeyboardUI:RegisterModule(module)
 	
 	local AUCTION_HOUSE_SELL_TAB = AUCTION_HOUSE_SELL_TAB or "Sell"
-	local AUCTION_HOUSE_BUY_TAB = AUCTION_HOUSE_SELL_TAB or "Buy"
+	local AUCTION_HOUSE_BUY_TAB = AUCTION_HOUSE_BUY_TAB or "Buy"
 
 	local function getMerchantSlotText()
 		if sellMode then
@@ -1231,7 +1256,7 @@ do
 				if text then
 					return ("%s %s"):format(AUCTION_HOUSE_SELL_TAB, text)
 				else
-					return (EMPTY)
+					return ("%s %d, %s"):format(AUCTION_HOUSE_HEADER_ITEM, select(2, getBagAndSlot()), getBagSlotText() or EMPTY)
 				end
 			end
 		elseif buybackSlot then

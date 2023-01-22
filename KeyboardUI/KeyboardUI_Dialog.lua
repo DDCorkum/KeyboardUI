@@ -204,7 +204,27 @@ do
 			
 		return title, content, criteria
 	end
+	
+	function module:Forward()
+		if QuestFrameRewardPanel:IsVisible() then
+			if QuestInfoFrame.itemChoice < GetNumQuestChoices() and QuestInfoRewardsFrame.RewardButtons[QuestInfoFrame.itemChoice+1] then
+				QuestInfoItem_OnClick(QuestInfoRewardsFrame.RewardButtons[QuestInfoFrame.itemChoice+1])
+			end
+		else
+			return module:DoAction()
+		end
+	end
 
+	function module:Backward()
+		if QuestFrameRewardPanel:IsVisible() then
+			if QuestInfoFrame.itemChoice > 1 and QuestInfoRewardsFrame.RewardButtons[QuestInfoFrame.itemChoice-1] then
+				QuestInfoItem_OnClick(QuestInfoRewardsFrame.RewardButtons[QuestInfoFrame.itemChoice-1])
+			end
+		else
+			return module:DoAction()
+		end
+	end
+	
 	function module:Actions()
 		return nil
 	end
