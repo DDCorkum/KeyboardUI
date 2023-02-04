@@ -48,11 +48,7 @@ do
 		end
 	end
 
-	function module:RefreshEntry()
-		return true
-	end
-
-	function module:GetEntryLongDescription()
+	function module:GetLongDescription()
 		return getGreetingText(), entry > 0 and entry .. ". " .. buttons[entry]:GetText()
 	end
 
@@ -168,13 +164,6 @@ do
 	function module:PrevEntry()
 		entry = module:findPrevInTable(buttons, entry, function(btn) return btn:IsVisible() and btn:IsEnabled() end) or 0
 		return entry > 0 and buttons[entry]:GetText()
-	end
-
-	function module:RefreshEntry()
-		if entry > 0 and not (buttons[entry]:IsVisible() and buttons[entry]:IsEnabled()) then
-			entry = module:findNextInTable(buttons, 0, function(btn) return btn:IsVisible() and btn:IsEnabled() end) or 0
-		end
-		return true
 	end
 
 	function module:GetEntryLongDescription()

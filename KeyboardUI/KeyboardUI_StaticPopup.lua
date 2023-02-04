@@ -74,12 +74,22 @@ function module:PrevEntry()
 	end
 end
 
-function module:RefreshEntry()
+function module:GetShortTitle()
 	return currentPopup > 0 and popups[currentPopup].text:GetText()
 end
 
-function module:GetEntryLongDescription()
-	return currentPopup > 0 and "Popup: " .. popups[currentPopup].text:GetText()
+function module:GetLongDescription()
+	if currentPopup > 0 then
+		local tbl = {}
+		for i, button in ipairs(buttons[currentPopup]) do
+			local txt = button:GetText()
+			if txt then
+				tinsert(tbl, button:GetText())
+			end
+		end
+		local delim = " " .. QUEST_LOGIC_OR .. " "
+		return "Popup: " .. popups[currentPopup].text:GetText() .. " " .. table.concat(tbl, delim)
+	end
 end
 
 function module:Forward()

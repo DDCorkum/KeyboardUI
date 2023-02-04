@@ -59,7 +59,7 @@ do
 		return buttons[position]:GetText()
 	end
 	
-	function module:RefreshEntry()
+	function module:GetLongDescription()
 		return position > 0 and buttons[position]:GetText()
 	end
 	
@@ -82,7 +82,7 @@ do
 	end
 	
 	GameMenuButtonStore:HookScript("OnClick", function()
-		msg = module:ttsInterrupt("Warning: You have openned the in-game shop for purchasing cosmetic items.  Keyboard UI is forbidden from helping you navigate this frame for security reasons.   Pressing escape should close the window safely.", KUI_NORMAL, KUI_FF, true)
+		msg = module:ttsInterrupt("Warning: You have openned the in-game shop for purchasing cosmetic items.  Keyboard UI is forbidden from helping you navigate this frame for security reasons.   Pressing escape should close the window safely.", KUI_NORMAL, KUI_FF)
 	end)
 
 end -- end of GameMenu
@@ -376,13 +376,7 @@ do
 		end
 	end
 	
-	function module:RefreshEntry()
-		while entry > 0 do
-			if entry < #entries and entries[entry]:IsShown() and (entries[entry].IsEnabled and entries[entry]:IsEnabled() or not entries[entry].IsEnabled) then
-				break
-			end
-			entry = entry - 1
-		end
+	function module:GetLongDescription()
 		if entry > 0 then
 			return labels[entry] .. "; " .. getStatus(entries[entry]), (entries[entry].tooltipText or entries[entry].description or ""):format(getStatus(entries[entry]))
 		end

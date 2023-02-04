@@ -19,8 +19,6 @@ KeyboardUI_Actions.lua - Includes modules which must share access to the action 
 local KeyboardUI = select(2, ...)
 local L = KeyboardUI.text
 
-local moduleUsingActionBar = nil
-
 -------------------------
 -- Shared action bar management
 
@@ -78,12 +76,16 @@ local function getActionText(optAction)
 		if action <= 84 then
 			return ("%s at %s slot %d"):format(contains, className == "DRUID" and "Cat Form Bar" or className == "ROGUE" and "Stealth Bar" or className == "WARRIOR" and "Battle Stance Bar" or (PAGE_NUMBER:format(7).." ("..UNUSED..")"), action-72)
 		elseif action <= 96 then
-			return ("%s at %s slot %d"):format(contains, className == "DRUID" and "Prowl Bar" or className == "ROGUE" and "Shadow Dance Bar" or className == "WARRIOR" and "Defensive Stance Bar" or (PAGE_NUMBER:format(7).." ("..UNUSED..")"), action-84)
+			return ("%s at %s slot %d"):format(contains, className == "DRUID" and "Prowl Bar" or className == "ROGUE" and "Shadow Dance Bar" or className == "WARRIOR" and "Defensive Stance Bar" or (PAGE_NUMBER:format(8).." ("..UNUSED..")"), action-84)
 		elseif action <= 108 then
-			return ("%s at %s slot %d"):format(contains, className == "DRUID" and "Bear Form Bar" or className == "WARRIOR" and "Berserker Stance Bar" or (PAGE_NUMBER:format(7).." ("..UNUSED..")"), action-96)
+			return ("%s at %s slot %d"):format(contains, className == "DRUID" and "Bear Form Bar" or className == "WARRIOR" and "Berserker Stance Bar" or (PAGE_NUMBER:format(9).." ("..UNUSED..")"), action-96)
 		else
-			return ("%s at %s slot %d"):format(contains, className == "DRUID" and "Moonkin Form Bar" or (PAGE_NUMBER:format(7).." ("..UNUSED..")"), action-108)
+			return ("%s at %s slot %d"):format(contains, className == "DRUID" and "Moonkin Form Bar" or (PAGE_NUMBER:format(10).." ("..UNUSED..")"), action-108)
 		end
+	elseif action <= 132 then
+		return ("%s at %s slot %d"):format(contains, GENERIC_TRAIT_FRAME_DRAGONRIDING_TITLE, action-120)
+	else
+		return ("%s at %s slot %d"):format(contains, PAGE_NUMBER:format(ceil(action/12)), action%12)
 	end
 end
 
@@ -258,9 +260,7 @@ do
 
 	KeyboardUI:RegisterModule(module)
 
-	local parentGainFocus = module.GainFocus
 	function module:GainFocus()
-		parentGainFocus(self)
 		moduleUsingActionBar = self
 	end
 	
@@ -524,6 +524,13 @@ do
 		end
 	end
 
+	local function validateEntry()
+		local numSpells = book == 3 and HasPetSpells() or select(4, GetSpellTabInfo(tab))
+		if slot > numSpells then
+			setSlot(numSpells)
+		end
+	end
+
 	function module:NextEntry()
 		if book == 2 then
 			if slot > 0 and slot < select(4, GetSpellTabInfo(tab)) then
@@ -565,22 +572,18 @@ do
 		end
 	end
 
-	function module:RefreshEntry()
-		local numSpells = book == 3 and HasPetSpells() or select(4, GetSpellTabInfo(tab))
-		if slot > numSpells then
-			setSlot(numSpells)
-		end
-		return slot > 0 and getEntryText() or ""
+	function module:GetShortTitle()
+		return slot > 0 and getEntryText(false)
 	end
 
-	function module:GetEntryLongDescription()
-		return getEntryText(true)
+	function module:GetLongDescription()
+		return slot > 0 and getEntryText(true)
 	end
 
 	function module:Forward()
 		if useActionSlots then
 			return nextActionSlot(slot > 0)
-		else
+		elseif slot > 0 then
 			useActionSlots = true
 			self:updatePriorityKeybinds()
 			return action == 0 and nextActionSlot(slot > 0) or slot > 1 and REPLACES_SPELL:format(getActionText()) or getActionText()
@@ -590,7 +593,7 @@ do
 	function module:Backward()
 		if useActionSlots then
 			return prevActionSlot(slot > 0)
-		else
+		elseif slot > 0 then
 			useActionSlots = true
 			self:updatePriorityKeybinds()
 			return action == 0 and nextActionSlot(slot > 0) or slot > 1 and REPLACES_SPELL:format(getActionText()) or getActionText()
@@ -639,7 +642,7 @@ do
 			if firstTime and UnitLevel("player") <= 5 then
 				firstTime = false
 				module:ttsInterrupt(book)
-				module:ttsQueue(([=[Use %s and %s to choose a spell, and use %s and %s to choose an action bar slot.  %s puts the chosen spell in the chosen action bar slot.]=]):format(module:getOption("bindingNextEntryButton"), module:getOption("bindingPrevEntryButton"), module:getOption("bindingForwardButton"), module:getOption("bindingBackwardButton"), module:getOption("bindingDoActionButton")), KUI_NORMAL, KUI_MP, true)
+				module:ttsQueue(([=[Use %s and %s to choose a spell, and use %s and %s to choose an action bar slot.  %s puts the chosen spell in the chosen action bar slot.]=]):format(module:getOption("bindingNextEntryButton"), module:getOption("bindingPrevEntryButton"), module:getOption("bindingForwardButton"), module:getOption("bindingBackwardButton"), module:getOption("bindingDoActionButton")), KUI_NORMAL, KUI_MP)
 			else
 				module:ttsYield(book)
 			end
@@ -755,7 +758,7 @@ local NUM_REAGENTBAG_SLOTS = NUM_REAGENTBAG_SLOTS or 0 -- classic vs retail
 local nextBagID, prevBagID = {}, {}
 
 itemLocation.IsValid = itemLocation.IsValid or function()
-	return GetContainerItemInfo(itemLocation.bagID, itemLocation.slotIndex) ~= nil
+	return (GetContainerItemInfo or C_Container.GetContainerItemInfo)(itemLocation.bagID, itemLocation.slotIndex) ~= nil
 end
 
 do
@@ -979,6 +982,9 @@ local function getBagSlotItemID()
 	return itemLocation:IsValid() and C_Item.GetItemID(itemLocation) or nil
 end
 
+local function getBagSlotHasItem()
+	return getBagSlotItemID() ~= nil
+end
 
 -------------------------
 -- Backpack and bags without a merchant window
@@ -1074,7 +1080,7 @@ do
 		if nextBagSlot() then
 			useActionSlots = false
 			self:updatePriorityKeybinds()
-			return getBagSlotText() or ("%s %d, %s"):format(AUCTION_HOUSE_HEADER_ITEM, select(2, getBagAndSlot()), EMPTY)
+			return getBagSlotText() or ("%s %d, %s"):format(AUCTION_HOUSE_HEADER_ITEM or "Slot", select(2, getBagAndSlot()), EMPTY)
 		end
 	end
 
@@ -1082,44 +1088,45 @@ do
 		if prevBagSlot() then
 			useActionSlots = false
 			self:updatePriorityKeybinds()
-			return getBagSlotText() or ("%s %d, %s"):format(AUCTION_HOUSE_HEADER_ITEM, select(2, getBagAndSlot()), EMPTY)
+			return getBagSlotText() or ("%s %d, %s"):format(AUCTION_HOUSE_HEADER_ITEM or "Slot", select(2, getBagAndSlot()), EMPTY)
 		end
 	end
 
-	function module:RefreshEntry()
-		refreshBag()
-		return itemLocation.slotIndex ~= 0
-	end
-
-	function module:GetEntryLongDescription()
+	function module:GetLongDescription()
 		return getBagSlotTooltip()
 	end
 
 	function module:Forward()
-		local itemID = GetContainerItemInfo and select(10, GetContainerItemInfo(getBagAndSlot())) or C_Container.GetContainerItemInfo(getBagAndSlot()).itemID
-		if useActionSlots then
-			return nextActionSlot(isUsable(itemID))
-		else
-			useActionSlots = true
-			self:updatePriorityKeybinds()
-			return action == 0 and nextActionSlot(isUsable(itemID)) or itemID and HasAction(action) and REPLACES_SPELL:format(getActionText()) or getActionText()
+		if getBagSlotHasItem() then
+			local itemID = GetContainerItemInfo and select(10, GetContainerItemInfo(getBagAndSlot())) or C_Container.GetContainerItemInfo(getBagAndSlot()).itemID
+			if useActionSlots then
+				return nextActionSlot(isUsable(itemID))
+			else
+				useActionSlots = true
+				self:updatePriorityKeybinds()
+				return action == 0 and nextActionSlot(isUsable(itemID)) or itemID and HasAction(action) and REPLACES_SPELL:format(getActionText()) or getActionText()
+			end
 		end
 	end
 
 	function module:Backward()
-		local itemID = GetContainerItemInfo and select(10, GetContainerItemInfo(getBagAndSlot())) or C_Container.GetContainerItemInfo(getBagAndSlot()).itemID
-		if useActionSlots then
-			return prevActionSlot(isUsable(itemID))
-		else
-			useActionSlots = true
-			self:updatePriorityKeybinds()
-			return action == 0 and prevActionSlot(isUsable(itemID)) or itemID and HasAction(action) and REPLACES_SPELL:format(getActionText()) or getActionText()
+		if getBagSlotHasItem() then
+			local itemID = GetContainerItemInfo and select(10, GetContainerItemInfo(getBagAndSlot())) or C_Container.GetContainerItemInfo(getBagAndSlot()).itemID
+			if useActionSlots then
+				return prevActionSlot(isUsable(itemID))
+			else
+				useActionSlots = true
+				self:updatePriorityKeybinds()
+				return action == 0 and prevActionSlot(isUsable(itemID)) or itemID and HasAction(action) and REPLACES_SPELL:format(getActionText()) or getActionText()
+			end
 		end
 	end
 
 	function module:Actions()
-		local itemID = GetContainerItemInfo and select(10, GetContainerItemInfo(getBagAndSlot())) or C_Container.GetContainerItemInfo(getBagAndSlot()).itemID
-		return getAllActionSlotTexts(isUsable(itemID))
+		if getBagSlotHasItem() then
+			local itemID = GetContainerItemInfo and select(10, GetContainerItemInfo(getBagAndSlot())) or C_Container.GetContainerItemInfo(getBagAndSlot()).itemID
+			return getAllActionSlotTexts(isUsable(itemID))
+		end
 	end
 
 	function module:DoAction(index)
@@ -1256,7 +1263,7 @@ do
 				if text then
 					return ("%s %s"):format(AUCTION_HOUSE_SELL_TAB, text)
 				else
-					return ("%s %d, %s"):format(AUCTION_HOUSE_HEADER_ITEM, select(2, getBagAndSlot()), getBagSlotText() or EMPTY)
+					return ("%s %d, %s"):format(AUCTION_HOUSE_HEADER_ITEM or "Item", select(2, getBagAndSlot()), getBagSlotText() or EMPTY)
 				end
 			end
 		elseif buybackSlot then
@@ -1270,9 +1277,15 @@ do
 			end
 		elseif merchantSlot > 0 then
 			local name, __, price, quantity, numAvailable, isPurchasable, isUsable, extendedCost = GetMerchantItemInfo(merchantSlot)
+			local itemCount = GetMerchantItemCostInfo(merchantSlot)
+			local price = GetCoinText(numToBuy > 0 and price*numToBuy/quantity or price/quantity)
+			for itemIndex=1, itemCount do
+				local __, itemQty, itemLink, currencyName = GetMerchantItemCostItem(merchantSlot, itemIndex)
+				price = price .. ", " .. (numToBuy > 0 and numToBuy*itemQty or itemQty) .. " " .. (currencyName or GetItemInfo(itemLink))
+			end
 			local text = 
-				numToBuy > 0 and ("%d %s; %s"):format(numToBuy, name, GetCoinText(price*numToBuy/quantity))
-				or isPurchasable and ("%s; %s%s"):format(name, COSTS_LABEL, GetCoinText(price/quantity))
+				numToBuy > 0 and ("%d %s; %s"):format(numToBuy, name, price)
+				or isPurchasable and ("%s; %s%s"):format(name, COSTS_LABEL, price)
 				or ("%s. %s"):format(name, UNAVAILABLE)
 			if numToBuy == 0 and numAvailable > 0 then
 				text = text .. "; " .. (AUCTION_HOUSE_QUANTITY_AVAILABLE_FORMAT and AUCTION_HOUSE_QUANTITY_AVAILABLE_FORMAT:format(numAvailable) or (numAvailable .. " " .. AVAILABLE))
@@ -1280,13 +1293,17 @@ do
 			if not isUsable then
 				local redText = module:getFirstRedTooltipLine("GetMerchantItem", merchantSlot)
 				if redText then
-					text = text .. " (" .. redText .. " )"
+					text = text .. " (" .. MOUNT_JOURNAL_FILTER_UNUSABLE .. ", " .. redText .. " )"
 				end
 			end
 			return text
 		end
 		return ""
 	end
+	
+	MerchantFrame:HookScript("OnShow", function()
+		merchantPage, merchantSlot = 0, 0
+	end)
 		
 	hooksecurefunc("MerchantFrame_Update", function()
 		if MerchantFrame.selectedTab == 1 then
@@ -1398,20 +1415,7 @@ do
 		end
 	end
 	
-	function module:Refresh()
-		if sellMode then
-			return refreshBag()
-		elseif buybackSlot then
-			buybackSlot = min(buybackSlot, GetNumBuybackItems())
-			return buybackSlot > 0
-		elseif merchantSlot > GetMerchantNumItems() then
-			merchantSlot = GetMerchantNumItems()
-			numToBuy = 0
-			return merchantSlot > 0
-		end
-	end
-	
-	function module:GetEntryLongDescription()
+	function module:GetLongDescription()
 		if sellMode then
 			return getBagSlotTooltip()
 		elseif buybackSlot then
@@ -1420,7 +1424,7 @@ do
 			end
 		elseif numToBuy > 0 then
 			return numToBuy .. " " .. module:concatTooltipLines("GetMerchantItem", merchantSlot)
-		else
+		elseif merchantSlot > 0 then
 			return module:concatTooltipLines("GetMerchantItem", merchantSlot)
 		end
 	end
@@ -1533,6 +1537,342 @@ end
 
 
 -------------------------
+-- MailFrame
+
+do
+
+	local inboxEntry, inboxItem, sendItem = 0, 0, 0
+
+	local module =
+	{
+		name = "MailFrame",
+		title = MINIMAP_TRACKING_MAILBOX or MAIL_LABEL,
+		frame = CreateFrame("Frame", nil, MailFrame),
+	}
+	
+	KeyboardUI:RegisterModule(module)
+	
+	function module:GainFocus()
+		moduleUsingBags = self
+	end
+	
+	function module:LoseFocus()
+		moduleUsingBags = self
+	end
+	
+	function module:ChangeTab()
+		if InboxFrame:IsShown() then
+			MailFrameTab2:Click()
+		else
+			MailFrameTab1:Click()
+		end
+	end
+	
+	function module:NextGroup()
+		if SendMailFrame:IsShown() then
+			if nextBag() then
+				local text = getBagSlotText()
+				return text and (SEND_LABEL .. " " .. text) or ("%s %d, %s"):format(AUCTION_HOUSE_HEADER_ITEM or "Slot", select(2, getBagAndSlot()), EMPTY)
+			end
+		else
+			return self:NextEntry()
+		end
+	end
+
+	function module:PrevGroup()
+		if SendMailFrame:IsShown() then
+			if prevBag() then
+				local text = getBagSlotText()
+				return text and (SEND_LABEL .. " " .. text) or ("%s %d, %s"):format(AUCTION_HOUSE_HEADER_ITEM or "Slot", select(2, getBagAndSlot()), EMPTY)
+			end
+		else
+			return self:PrevEntry()
+		end
+	end
+	
+	function module:NextEntry()
+		if InboxFrame:IsShown() then
+			OpenMailFrame:Hide()
+			if inboxEntry < GetInboxNumItems() then
+				if inboxEntry > 0 and inboxEntry % INBOXITEMS_TO_DISPLAY == 0 then
+					InboxNextPageButton:Click()
+				else
+					inboxEntry = inboxEntry + 1
+				end
+				local sender, subject = select(3, GetInboxHeaderInfo(inboxEntry))
+				return sender .. CHAT_HEADER_SUFFIX .. subject
+			end
+		elseif nextBagSlot() then
+			local text = getBagSlotText()
+			return text and (SEND_LABEL .. " " .. text) or ("%s %d, %s"):format(AUCTION_HOUSE_HEADER_ITEM or "Slot", select(2, getBagAndSlot()), EMPTY)
+		end
+	end
+	
+	function module:PrevEntry()
+		if InboxFrame:IsShown() then
+			OpenMailFrame:Hide()
+			if inboxEntry > 1 then
+				if inboxEntry % INBOXITEMS_TO_DISPLAY == 1 then
+					InboxPrevPageButton:Click()
+				else
+					inboxEntry = inboxEntry - 1
+				end
+				local sender, subject = select(3, GetInboxHeaderInfo(inboxEntry))
+				return sender .. CHAT_HEADER_SUFFIX .. subject
+			end
+		elseif prevBagSlot() then
+			local text = getBagSlotText()
+			return text and (SEND_LABEL .. " " .. text) or ("%s %d, %s"):format(AUCTION_HOUSE_HEADER_ITEM or "Slot", select(2, getBagAndSlot()), EMPTY)
+		end
+	end
+	
+	local function getInboxButton()
+		return _G["MailItem" .. Wrap(inboxEntry, INBOXITEMS_TO_DISPLAY) .. "Button"] -- MailItem1 to MailItem 7
+	end
+	
+	local function getInboxItemSlot()
+		local i, x = 0, 0
+		while x < inboxItem do
+			i = i + 1
+			if GetInboxItem(inboxEntry, i) then
+				x = x + 1
+			end
+		end
+		return i
+	end
+	
+	local function getInboxItemText()
+		local name, __, __, count, __, canUse = GetInboxItem(inboxEntry, getInboxItemSlot())
+		if count > 1 then
+			if canUse then
+				return ("%d %s"):format(count, name)
+			else
+				return ("%d %s, %s"):format(count, name, MOUNT_JOURNAL_FILTER_UNUSABLE)
+			end
+		else
+			if canUse then
+				return name
+			else
+				return ("%s, %s"):format(name, MOUNT_JOURNAL_FILTER_UNUSABLE)
+			end
+		end
+	end
+	
+	local function getInboxMessageText()
+		if inboxEntry > 0 then
+			local sender, subject, money, __, __, hasItem = select(3, GetInboxHeaderInfo(inboxEntry))
+			money = money > 0 and GetCoinText(money) or ""
+			hasItem = hasItem and hasItem > 0 and (hasItem .. " " .. ITEMS) or ""
+			return 
+				CHAT_SAY_GET:format(sender) .. subject,
+				GetInboxText(inboxEntry),
+				money .. " " .. hasItem
+		end
+	end
+	
+	function module:Forward()
+		if InboxFrame:IsShown() then
+			if OpenMailFrame:IsShown() then
+				local hasItem = select(8, GetInboxHeaderInfo(inboxEntry)) or 0
+				if inboxItem < hasItem then
+					inboxItem = inboxItem + 1
+					return getInboxItemText()
+				elseif inboxItem == hasItem then
+					inboxItem = ATTACHMENTS_MAX_RECEIVE + 1
+					return InboxItemCanDelete(inboxEntry) and DELETE or MAIL_RETURN
+				end
+			elseif inboxEntry > 0 then
+				getInboxButton():Click()
+				return getInboxMessageText()
+			end
+		else -- if SendMailFrame:IsShown() then
+			while sendItem <= ATTACHMENTS_MAX_SEND do
+				sendItem = sendItem + 1
+				local name = GetSendMailItem(sendItem)
+				if name then
+					return name
+				end
+			end
+			return SEND_MESSAGE
+		end
+	end
+	
+	function module:Backward()
+		if InboxFrame:IsShown() then
+			if inboxItem > 0 then
+				local hasItem = select(8, GetInboxHeaderInfo(inboxEntry)) or 0
+				if inboxItem == ATTACHMENTS_MAX_RECEIVE + 1 then
+					inboxItem = hasItem
+				elseif inboxItem > 0 then
+					inboxItem = inboxItem - 1
+				end
+				if inboxItem > 0 then
+					return getInboxItemText()
+				else
+					return getInboxMessageText()	-- three return values!
+				end
+			else
+				OpenMailFrame:Hide()
+			end
+		else -- if SendMailFrame:IsShown() then
+			while sendItem > 1 do
+				sendItem = sendItem - 1
+				local name = GetSendMailItem(sendItem)
+				if name then
+					return name
+				end
+			end
+			sendItem = 0
+		end
+	end
+	
+	function module:Actions()
+		if InboxFrame:IsShown() then
+			if OpenMailFrame:IsShown() then
+				local money, __, __, __, __, __, __, canReply, isGM = select(5, GetInboxHeaderInfo(inboxEntry))
+				local canDelete = InboxItemCanDelete(inboxEntry)
+				return
+					nil,
+					money > 0 and MONEY, -- 2
+					canReply and REPLY_MESSAGE, -- 3
+					nil,
+					canDelete and DELETE, -- 5
+					not canDelete and MAIL_RETURN, -- 6
+					nil,
+					nil,
+					not isGM and REPORT_SPAM -- 9
+			elseif GetInboxNumItems() > 0 then
+				return OPEN_ALL_MAIL_BUTTON
+			end
+		else -- if SendMailFrame:IsShown()
+			return SEND_MESSAGE, CHOOSE .. " " .. SEND_MONEY, CHOOSE .. " " .. CASH_ON_DELIVERY
+		end
+	end
+	
+	function module:DoAction(index)
+		if InboxFrame:IsShown() then
+			if OpenMailFrame:IsShown() then
+				local money, __, __, __, __, __, __, canReply, isGM = select(5, GetInboxHeaderInfo(inboxEntry))
+				local canDelete = InboxItemCanDelete(inboxEntry)
+				if index then
+					if index == 2 and money > 0 then
+						TakeInboxMoney(inboxEntry)
+					elseif index == 3 and canReply then
+						OpenMailReplyButton:Click()
+					elseif index == 5 and canDelete then
+						OpenMailDeleteButton:Click()
+					elseif index == 6 and not canDelete then
+						OpenMailDeleteButton:Click()
+					elseif index == 9 and not isGM then
+						OpenMailReportSpamButton:Click()
+					end
+				elseif inboxItem == ATTACHMENTS_MAX_RECEIVE + 1 then
+					OpenMailDeleteButton:Click()
+				elseif inboxItem > 0 then
+					TakeInboxItem(inboxEntry, getInboxItemSlot())
+				elseif money > 0 then
+					TakeInboxMoney(inboxEntry)
+				end
+			else
+				if index == 1 and GetInboxNumItems() > 0 then
+					OpenAllMail:Click()
+				elseif inboxEntry > 0 then
+					getInboxButton():Click()
+					return getInboxMessageText()
+				end
+			end
+		else -- if SendMailFrame:IsShown() then
+			if index then
+				if index == 1 then
+					SendMailMailButton:Click()
+				elseif index == 2 then
+					SendMailSendMoneyButton:Click()
+				elseif index == 3 then
+					SendMailCODButton:Click()
+				end	
+			elseif sendItem > 0 and sendItem <= ATTACHMENTS_MAX_SEND then
+				ClickSendMailItemButton(sendItem, true)
+				sendItem = sendItem - 1
+			elseif sendItem > ATTACHMENTS_MAX_SEND then
+				SendMailMailButton:Click()
+			else
+				ClearCursor()
+				for i=1, ATTACHMENTS_MAX_SEND do
+					if not HasSendMailItem(i) then
+						(PickupContainerItem or C_Container.PickupContainerItem)(getBagAndSlot())
+						ClickSendMailItemButton(i)
+					end
+				end
+				sendItem = 0
+			end
+		end
+	end
+		
+	function module:GetLongDescription()
+		if InboxFrame:IsShown() then
+			local numItems, totalItems = GetInboxNumItems()
+			if GetInboxNumItems() == 0 then
+				if totalItems > 0 then
+					return
+				else
+					return EMPTY
+				end
+			elseif OpenMailFrame:IsShown() then
+				return getInboxMessageText()
+			end
+		else -- if SendMailFrame:IsShown() then
+			local name, subj = SendMailNameEditBox:GetText(), SendMailSubjectEditBox:GetText()
+			name = name ~= "" and name or EMPTY
+			subj = subj ~= "" and subj or EMPTY
+			local attachments = 0
+			for i=1, ATTACHMENTS_MAX_SEND do
+				if HasSendMailItem(i) then
+					attachments = attachments + 1
+				end
+			end
+			local money = 10000*(tonumber(SendMailMoneyGold:GetText()) or 0) + 100*(tonumber(SendMailMoneySilver:GetText()) or 0) + (tonumber(SendMailMoneyCopper:GetText()) or 0)
+			if money > 0 then
+				money = GetCoinText(money)
+				if SendMailCODButton:GetChecked() then
+					money = money .. " " .. CASH_ON_DELIVERY
+				end
+				if attachments > 0 then
+					return SENDMAIL, SendMailBodyEditBox:GetText(), ("%s %s; %s %s; %s; %d %s"):format(MAIL_TO_LABEL, name, MAIL_SUBJECT_LABEL, subj, money, attachments, ITEMS)
+				else
+					return SENDMAIL, SendMailBodyEditBox:GetText(), ("%s %s; %s %s; %s"):format(MAIL_TO_LABEL, name, MAIL_SUBJECT_LABEL, subj, money)
+				end
+			elseif attachments > 0 then
+				return SENDMAIL, SendMailBodyEditBox:GetText(), ("%s %s; %s %s; %d %s"):format(MAIL_TO_LABEL, name, MAIL_SUBJECT_LABEL, subj, attachments, ITEMS)
+			else
+				return SENDMAIL, SendMailBodyEditBox:GetText(), ("%s %s; %s %s"):format(MAIL_TO_LABEL, name, MAIL_SUBJECT_LABEL, subj)
+			end
+		end
+	end
+
+	hooksecurefunc("InboxFrame_Update", function()
+		local pageNum = InboxFrame.pageNum
+		inboxEntry = Clamp(inboxEntry, pageNum > 1 and (pageNum-1) * INBOXITEMS_TO_DISPLAY + 1 or 0, GetInboxNumItems(), pageNum * INBOXITEMS_TO_DISPLAY)
+	end)
+	
+	hooksecurefunc("OpenMail_Update", function()
+		local newMailID = InboxFrame.openMailID
+		inboxEntry = newMailID and newMailID > 0 and newMailID or min(inboxEntry, GetInboxNumItems())
+		if inboxEntry > 0 then
+			local hasItem = select(8, GetInboxHeaderInfo(inboxEntry)) or 0
+			if inboxItem > hasItem then
+				inboxItem = hasItem
+			end
+		else
+			inboxItem = 0
+		end
+	end)
+
+	module:overrideEditFocus(SendMailFrame)
+
+end
+
+
+-------------------------
 -- PlayerTalentFrameSpecialization (Retail)
 
 if false then -- not yet updated for WoW 10.x -- WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
@@ -1557,7 +1897,7 @@ if false then -- not yet updated for WoW 10.x -- WOW_PROJECT_ID == WOW_PROJECT_M
 			spec, ability = self.previewSpec or 0, 0
 			name, description, misc = module:GetEntryLongDescription()
 			if name then
-				module:ttsInterruptExtended("<speak><silence msec=\"1800\" />" .. name .. "</speak>", description, misc)
+				module:ttsExplain("<speak><silence msec=\"1800\" />" .. name .. "</speak>", description, misc)
 			end
 		end)
 	end)
@@ -1591,11 +1931,7 @@ if false then -- not yet updated for WoW 10.x -- WOW_PROJECT_ID == WOW_PROJECT_M
 		end
 	end
 	
-	function module:RefreshEntry()
-		return spec > 0
-	end
-	
-	function module:GetEntryLongDescription()
+	function module:GetLongDescription()
 		if spec > 0 then
 			local __, name, description, __, role, primaryStat = GetSpecializationInfo(spec)
 			details = role .. ". " .. SPEC_FRAME_PRIMARY_STAT:format(SPEC_STAT_STRINGS[primaryStat]) .. ". " .. ABILITIES .. CHAT_HEADER_SUFFIX
@@ -1745,10 +2081,6 @@ if false then -- not yet updated for WoW 10.x --  WOW_PROJECT_ID == WOW_PROJECT_
 		end
 	end
 	
-	function module:RefreshEntry()
-		return tier > 0
-	end
-	
 	function module:GetEntryLongDescription()
 		local activeSpec = GetActiveSpecGroup()
 		local tierAvailable, selectedTalent, tierUnlockLevel = GetTalentTierInfo(tier, activeSpec)
@@ -1768,7 +2100,7 @@ if false then -- not yet updated for WoW 10.x --  WOW_PROJECT_ID == WOW_PROJECT_
 	module.frame:HookScript("OnEvent", function()
 		if attemptedColumn and select(4, GetTalentInfo(tier, attemptedColumn, GetActiveSpecGroup())) then
 			attemptedColumn = nil
-			module:ttsInterruptExtended(module:GetEntryLongDescription())
+			module:ttsExplain(module:GetEntryLongDescription())
 		end
 	end)
 	

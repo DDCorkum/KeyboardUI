@@ -71,11 +71,7 @@ function module:PrevEntry()
 	end
 end
 
-function module:RefreshEntry()
-	return getButton() or self:Backward() or self:PrevEntry() or self:NextEntry() or self:Forward()	and getText() -- failsafe nudge!
-end
-
-function module:GetEntryLongDescription()
+function module:GetLongDescription()
 	-- NYI.  Eventually this needs to describe the setting (is it checked, does it expand, etc.)
 	return getText()
 end

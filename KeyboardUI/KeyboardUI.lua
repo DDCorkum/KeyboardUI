@@ -19,6 +19,10 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+10.06 (2023-02-04) by Dahk Celes
+- Follows game TTS voice settings
+- Adds mailboxes
+
 10.05 (2023-01-22) by Dahk Celes
 - Choose quest item rewards
 
@@ -107,7 +111,6 @@ KUI_HIGHLIGHT_COLOR = {1, 1, 0, 0.2}
 local TEXT_TO_SPEECH = TEXT_TO_SPEECH or "Text to speech"	-- Classic compatibility for 1.14.1 (not fixed) and 2.5.2 (fixed in 2.5.3)
 
 local KUI_VOICE					-- defined at PLAYER_LOGIN
-local KUI_VOICE_ENGLISH
 
 KeyboardUI.tooltips = true		-- temporary flag to inform WoWAccess that this version of Keyboard UI has more tooltips installed.
 
@@ -131,7 +134,6 @@ local globalDefaults =
 	onEnterSayUI = true,
 	onEnterSayFullTooltip = true,
 	onEnterPing = true,
-	onEnterRequireMouseMovement = true,
 	
 	-- Default state for all modules
 	enabled = true,								-- Disables a module entirely when false
@@ -166,98 +168,13 @@ local globalDefaults =
 }
 
 -------------------------
--- API / Instructions / Boilerplate
-
---[[
-
-local module = {name = "must be a string", frame = CreateFrame("Frame", nil, BlizzardFrame)}  -- Keybinds depend on the frame strata, frame level, and visibility.  Parenting to an appropriate BlizzardFrame is optional, but automates this.
-
-KeyboardUI:RegisterModule(module, minorVersion)		
-
-	-- Saved variables
-	
-		-- KeyboardUI may include custom saved variables on behalf of any module.  The following helper functions are intended to access these custom variables.
-		
-		-- module:setDefault(option, value)								-- Set a default value that will be used when the user has not made an explicit choice, or after the user resets all settings to their defaults.
-		-- module:setOption(option [, value])							-- Write to KeyboardUI SavedVariables.  Not meant to be used except when the user makes an explicit choice (that may or may not deviate from the default).
-		-- module:getOption(option)										-- Read from KeyboardUI SavedVariables.
-		-- module:onOptionChanged(option, func)							-- Request a callback whenever the user changes an option.  This includes cancelling previous changes, or returning to defaults.
-
-		-- Arguments for setDefault(), setOption() and getOption()
-			-- option		string		Silently fails if a reserved keyword is used.  The current reserved keywords are "enableKeyboard", "speed" and "volume".
-			-- value		any type	Must be serializable or else SavedVariables will fail.
-	
-	-- Interface options
-	
-		-- Insert widgets with a common look and feel to other KeyboardUI interface options.  These widgets automatically use SavedVariables and call module:Update() when changed.
-		
-		-- module:panelCheckButton(option, title, tooltip [, parentOption])								-- Create a CheckButon.
-		-- module:panelSlider(option, title, tooltip, min, max, step, [low, high, top, parentOption])	-- Create a Slider.  "top" is formatted as top:format(slider:GetValue()).  Leaving low, high and top nil results in a smaller slider with no labels.
-		
-		-- Arguments for addCheckButton(), addSlider()
-			-- option		string		Silently fails if an existing keyword is used.
-			-- title		string		Label displayed before the slider.
-			-- tooltip		string		Text printed and spoken during hover.
-			-- parentOption string		Only appears when getOption(parentOption) is neither false nor nil.
-					
-	-- Text to speech
-	
-		-- KeyboardUI provides user interface settings to influence properties such as the speed and volume on a per-module basis.
-		-- The following wrapper functions apply user settings before calling C_VoiceChat.SpeakText()
-		-- If the user sets volume for a module to zero, then nothing is spoken.
-
-		-- module:ttsQueue(text [, rate, dynamics, useEnglish])			-- Speaks using queued local playback.
-		-- module:ttsInterrupt(text [, rate, dynamics, useEnglish])		-- Interrupts any ongoing or queued local playback with a new message.
-		-- module:ttsStop()												-- Stops any ongoing or queued local playback.
-
-		-- Arguments for ttsQueue() and ttsInterrupt()
-			-- text			string		Message for local playback.
-			-- rate			number		Defaults to 3.
-			-- dynamics		number		Defaults to KUI_MF.  Expected values are KUI_FF, KUI_F, KUI_MF, KUI_MP, KUI_P, or KUI_PP. 
-			-- useEnglish	boolean		When true, a language with "English" in the name will be preferred even if this differs from the user's choices.
-		
-		
-	-- Methods that each module should overwrite as required. (Hint: they start with upper case.)
-		
-		-- intro [, body, concl] = module:ChangeTab()					-- Cycle tabs (forward, and then wrap around) when the window is made up of multiple tabs.
-
-		-- intro [, body, concl] = module:NextGroup()					-- Go to the first entry in the next/prev group containing entries.  Defaults to Next/PrevEntry(), so override only if there is more than one group.  Return false to indicate failure.
-		-- intro [, body, concl] = module:PrevGroup()					-- Examples: paging in the merchant frame; collapsible headers in the quest log; and sections of settings in the interface options.
-		
-		-- intro [, body, concl] = module:NextEntry()					-- Go to the first action in the nextprev entry containing actions.  Defaults to Forward/Backward(), so override only if there is more than one entry.  Return false to indicate failure.
-		-- intro [, body, concl] = module:PrevEntry()					-- Examples: each item in the merchant frame; each quest in the quest log; and each setting in the interface options.
-				
-		-- intro = module:RefreshEntry()								-- Confirm the current entry is valid, and if not, go to the most appropriate entry.  Defaults to NextEntry().  Return false to indicate failure.
-		-- intro [, body, concl] = module:GetEntryLongDescription()		-- Get a full-length description of the entry.
-		
-		-- intro [, body, concl] = module:Forward()						-- Cycle between available actions, or does an action going "forward" if the only choices are forward/backward.  Defaults to DoAction(), so override only if there is more than one action.   Return nil to indicate failure.
-		-- intro [, body, concl] = module:Backward()					-- Examples: choosing between tracking, sharing or abandoning a quest; choosing between different buttons in the StaticPopup; or immediately moving a slider forward and back.
-		
-		-- title1, ..., title12 = module:Actions()						-- REQUIRED.  Provide a list of up to 12 available hot key actions  If none are possible, return an empty string.
-		-- [result] = module:DoAction([index])							-- REQUIRED.  Do the action selected with Next/PrevAction(), or the indexth action returned by Actions().
-
-		
-	-- Helper functions that should NOT be overwritten. (Hint: they start with lower case.)
-	
-		-- module:afterCombat(func, ...)								-- Call self:func(...) as soon as possible but outside combat lockdown
-		-- module:displayTooltip(text [, optLine1], ...)				-- NEEDS DOCUMENTATION		
-		-- module:getScanningTooltip([N])								-- Provides a scanning tooltip (based on SharedTooltipTemplate) that has already had ClearLines().  Pass N to ensure the tooltip has: .left1, .right1, .left2, .right2, ..., .leftN, .rightN.
-	
-	-- Methods that each module may overwrite if desired. (Hint: they start with upper case.)
-	
-		-- module:Init()												-- Called when the module's saved variables are accessible (normally after ADDON_LOADED).  This is the earliest that :setOption() will work; but :setDefault() is permitted earlier.
-	
-local L = module.text	-- Optional localization.  A metatable is added during registration such that L["something"] returns "something" if a localized alternative is not found
-	
---]]
-
-
--------------------------
 -- Private properties
 
 -- Modules, which contain options and 1 or more frames
 local modules = {}					-- Modules in the order they were loaded (unless overridden by optIndex)
 local modulesByName = {}			-- Modules in no particular order, to simplify getting them by name
+
+local metamodules = {}				-- Groups of modules that appear together in the options menu
 
 -- Frames that are currently visible and associated with a module
 local shownFrames = {}				-- Frames associated to a module that are currently visible, prioritized by frame strata and level
@@ -269,7 +186,7 @@ local tempOptions = {}				-- While the interface options are open
 local optionCallbacks = {}			-- Called when an option changes in the interface options
 
 -- Core addon
-local lib = {name = "global"}		-- Functions inheritable by all modules
+local lib = {name = "global"}		-- Functions and settings inheritable by all modules
 local frame = CreateFrame("Frame")	-- General event handler and override keybind owner
 local events = {}					-- The event handlers for frame, sorted by event
 
@@ -420,6 +337,11 @@ local function updateFrameStrataAndLevel(frame)
 	end
 end
 
+-- module.name		string
+-- module.title 	string		defaults to module.name
+-- module.frame		Frame
+-- module.frames	Frame[]		substitute for module.frame
+
 function KeyboardUI:RegisterModule(module, optIndex)
 	assert(type(module.name) == "string" and (module.frame and module.frame:IsObjectType("Frame") or module.frames) and not modules[module.name], "Invalid module registration")
 	if optIndex then
@@ -433,6 +355,7 @@ function KeyboardUI:RegisterModule(module, optIndex)
 		module.id = #modules
 	end
 	modulesByName[module.name] = module
+	
 	setmetatable(module, {__index = lib})
 	
 	if module.frames then
@@ -517,24 +440,15 @@ local function configureOptions(name)
 end
 
 local function configureVoices()
-	local opt1, opt2
-	if C_TTSSettings then
-		-- Classic compatibility with 1.14.1
-		opt1, opt2 = C_TTSSettings.GetVoiceOptionID(0), C_TTSSettings.GetVoiceOptionID(1)
-	end
-	local voices = C_VoiceChat.GetTtsVoices()
-	for __, voice in ipairs(voices) do
-		if voice.name:find("English") and (voice.voiceID == opt1 or voice.voiceID == opt2 or not KUI_VOICE_ENGLISH) then
-			KUI_VOICE_ENGLISH = voice.voiceID
-			if voice.voiceID == opt1 then
-				-- this is the preferred option
-				break;
-			end
+	local opt = C_TTSSettings.GetVoiceOptionID(0) or C_TTSSettings.GetVoiceOptionID(1)
+	if opt then
+		KUI_VOICE = opt
+	else
+		local voices = C_VoiceChat.GetTtsVoices()
+		if voices and voices[1] then
+			KUI_VOICE = voices[1].voiceID
 		end
 	end
-	KUI_VOICE = opt1 or opt2 or KUI_VOICE_ENGLISH or voices[1] and voice[1].voiceID or nil
-	KUI_VOICE_ENGLISH = KUI_VOICE_ENGLISH or KUI_VOICE
-
 end
 
 lib:onEvent("ADDON_LOADED", function(arg1)
@@ -620,11 +534,13 @@ end
 
 function lib:NextGroup(...)
 	-- Override to navigate groups or pages, each with one or more entries, each with one or more actions.
+	-- Don't override if all entries are in the same group.
 	return self:NextEntry(...)
 end
 
 function lib:PrevGroup(...)
 	-- Override to navigate groups or pages, each with one or more entries, each with one or more actions.
+	-- Don't override if all entries are in the same group.
 	return self:PrevEntry(...)
 end
 
@@ -638,8 +554,14 @@ function lib:PrevEntry(...)
 	return self:Backward(...)
 end
 
-function lib:RefreshEntry(...)
-	return true
+function lib:GetShortTitle()
+	-- OVerride to say something other than the introductory part of self:GetLongDescription()
+	return (self:GetLongDescription())
+end
+
+
+function lib:GetLongDescription()
+	-- Override with three return values, strings, that will be read as an introduction, body and conclusion.
 end
 
 function lib:Forward(...)
@@ -653,35 +575,12 @@ function lib:Backward(...)
 end
 
 function lib:Actions()
-	-- REQUIRED.  Modules must override to avoid blocklisting.
-	local text
-	if self.name and self.frame then
-		self.frame:Hide()
-		text = "Keyboard UI found an error.  The " .. self.name .. " module is missing an a required function." 
-	else
-		text = "Keyboard UI has encountered an unknown error."
-	end
-	self.Actions = function() return "" end
-	print(text)
-	return text
+	-- Override with up to twelve return values; any that are a non-empty string will enable a special hotkey
+	return nil
 end
 
-function lib:DoAction()
-	-- REQUIRED.  Modules must override to avoid blocklisting.
-	local text
-	if self.name and self.frame then
-		self.frame:Hide()
-		text = "Keyboard UI found an error.  The " .. self.name .. " module is missing an a required function." 
-	else
-		text = "Keyboard UI has encountered an unknown error."
-	end
-	self.DoAction = function() return "" end
-	print(text)
-	return text
-end
-
-function lib:GetEntryLongDescription()
-	return self:RefreshEntry()
+function lib:DoAction(index)
+	return "Not yet implemented"
 end
 
 -------------------------
@@ -715,7 +614,7 @@ ttsFrame:SetScript("OnUpdate", function()
 end)
 
 -- say something when previous messages have finished
-function lib:ttsQueue(text, rate, dynamics, useEnglish)
+function lib:ttsQueue(text, rate, dynamics)
 	local volume = self:getOption("volumeMax") * (1 + (dynamics or KUI_MF) * self:getOption("volumeVariance"))
 	if KUI_VOICE and volume > 0  and text and text ~= "" and self:getOption("enabled") and not ttsFrame.isBlocking then
 		text = tostring(text)
@@ -723,7 +622,7 @@ function lib:ttsQueue(text, rate, dynamics, useEnglish)
 		if text:sub(1,1) == "<" and not text:sub(1,7) == "<speak>" then
 			text = text:gsub("[\<\>]", " -- ")
 		end
-		tinsert(ttsFrame, {useEnglish and KUI_VOICE_ENGLISH or KUI_VOICE, text, Enum.VoiceTtsDestination.LocalPlayback, rate, volume})
+		tinsert(ttsFrame, {KUI_VOICE, text, Enum.VoiceTtsDestination.LocalPlayback, rate, volume})
 	end
 end
 
@@ -763,16 +662,21 @@ function lib:ttsStop()
 end
 
 -- say something immediately, cutting off earlier messages
-function lib:ttsInterrupt(...)
-	self:ttsStop()
-	self:ttsQueue(...)
+function lib:ttsInterrupt(msg, ...)
+	if msg and msg ~= "" then
+		self:ttsStop()
+		self:ttsQueue(msg, ...)
+	end
 end
 
 -- say three things in a row, using a body/intro/conclusion pattern
-function lib:ttsInterruptExtended(intro, body, conclusion)
-	self:ttsInterrupt(intro, KUI_QUICK, KUI_MF)
-	self:ttsQueue(body, KUI_CASUAL, KUI_MP)
-	self:ttsQueue(conclusion, KUI_NORMAL, KUI_MF)
+function lib:ttsExplain(intro, body, conclusion)
+	if intro and intro ~= "" then
+		self:ttsStop()
+		self:ttsQueue(intro, KUI_QUICK, KUI_MF)
+		self:ttsQueue(body, KUI_CASUAL, KUI_MP)
+		self:ttsQueue(conclusion, KUI_NORMAL, KUI_MF)
+	end
 end
 
 local function hideTooltip()
@@ -797,92 +701,98 @@ end
 -------------------------
 -- Keybindings continued
 
+local insecureButtons = {}
+
 local function getCurrentModule()
 	return shownFrames[#shownFrames] and shownFrames[#shownFrames].module
 end
 
-CreateFrame("Button", "KeyboardUIChangeTabButton"):SetScript("OnClick", function(__, button, down)
+insecureButtons.ChangeTab = CreateFrame("Button", "KeyboardUIChangeTabButton")
+insecureButtons.ChangeTab:SetScript("OnClick", function(__, button, down)
 	local module = getCurrentModule()
 	if module then
-		module:ttsStop()
-		module:ttsQueue(module:ChangeTab(), KUI_QUICK, KUI_MF)
+		module:ttsExplain(module:ChangeTab())
 	end
 end)
 
-CreateFrame("Button", "KeyboardUINextGroupButton"):SetScript("OnClick", function(__, button, down)
+insecureButtons.NextGroup = CreateFrame("Button", "KeyboardUINextGroupButton")
+insecureButtons.NextGroup:SetScript("OnClick", function(__, button, down)
 	local module = getCurrentModule()
 	if module then
-		module:ttsInterrupt(module:NextGroup(), KUI_QUICK, KUI_MF)
+		module:ttsExplain(module:NextGroup())
 	end
 end)
 
-CreateFrame("Button", "KeyboardUIPrevGroupButton"):SetScript("OnClick", function()
+insecureButtons.PrevGroup = CreateFrame("Button", "KeyboardUIPrevGroupButton")
+insecureButtons.PrevGroup:SetScript("OnClick", function()
 	local module = getCurrentModule()
 	if module then
-		module:ttsInterrupt(module:PrevGroup(), KUI_QUICK, KUI_MF)
+		module:ttsExplain(module:PrevGroup())
 	end
 end)
 
-CreateFrame("Button", "KeyboardUINextEntryButton"):SetScript("OnClick", function()
+insecureButtons.NextEntry = CreateFrame("Button", "KeyboardUINextEntryButton")
+insecureButtons.NextEntry:SetScript("OnClick", function()
 	local module = getCurrentModule()
 	if module then
-		module:ttsInterrupt(module:NextEntry(), KUI_QUICK, KUI_MF)
+		module:ttsExplain(module:NextEntry())
 	end
 end)
 
-CreateFrame("Button", "KeyboardUIPrevEntryButton"):SetScript("OnClick", function()
+insecureButtons.PrevEntry = CreateFrame("Button", "KeyboardUIPrevEntryButton")
+insecureButtons.PrevEntry:SetScript("OnClick", function()
 	local module = getCurrentModule()
 	if module then
-		module:ttsInterrupt(module:PrevEntry(), KUI_QUICK, KUI_MF)
+		module:ttsExplain(module:PrevEntry())
 	end
 end)
 
-CreateFrame("Button", "KeyboardUIForwardButton"):SetScript("OnClick", function()
+insecureButtons.Forward = CreateFrame("Button", "KeyboardUIForwardButton")
+insecureButtons.Forward:SetScript("OnClick", function()
 	local module = getCurrentModule()
-	if module and module:RefreshEntry() then
-		local intro, body, concl = module:Forward()
-		module:ttsInterrupt(intro, KUI_QUICK, KUI_MF)
-		module:ttsQueue(body, KUI_CASUAL, KUI_MP)
-		module:ttsQueue(concl, KUI_NORMAL, KUI_MF)
+	if module then
+		lib:ttsExplain(module:Forward())
 	end
 end)
 
-CreateFrame("Button", "KeyboardUIBackwardButton"):SetScript("OnClick", function()
+insecureButtons.Backward = CreateFrame("Button", "KeyboardUIBackwardButton")
+insecureButtons.Backward:SetScript("OnClick", function()
 	local module = getCurrentModule()
-	if module and module:RefreshEntry() then
-		local intro, body, concl = module:Backward()
-		module:ttsInterrupt(intro, KUI_QUICK, KUI_MF)
-		module:ttsQueue(body, KUI_CASUAL, KUI_MP)
-		module:ttsQueue(concl, KUI_NORMAL, KUI_MF)
+	if module then
+		lib:ttsExplain(module:Backward())
 	end
 end)
 
-CreateFrame("Button", "KeyboardUIDoActionButton"):SetScript("OnClick", function()
+insecureButtons.DoAction = CreateFrame("Button", "KeyboardUIDoActionButton")
+insecureButtons.DoAction:SetScript("OnClick", function()
 	local module = getCurrentModule()
-	if module and module:RefreshEntry() then
-		module:ttsStop()
-		module:ttsQueue(module:DoAction(), KUI_QUICK, KUI_MF)
+	if module then
+		module:ttsExplain(module:DoAction())
 	end
 end)
 
 for i=1, 12 do
-	local name = "KeyboardUIDoAction" .. i .. "Button"
-	CreateFrame("Button", name):SetScript("OnClick", function()
+	local shortName = "DoAction"..i
+	insecureButtons[shortName] = CreateFrame("Button", "KeyboardUI"..shortName.."Button")
+	insecureButtons[shortName]:SetScript("OnClick", function()
 		local module = getCurrentModule()
-		if module and module:RefreshEntry() then
-			module:ttsStop()
-			module:ttsQueue(module:DoAction(i), KUI_QUICK, KUI_MF)
+		if module then
+			local action = select(i, module:Actions())
+			if type(action) == "string" and action ~= "" then
+				module:ttsExplain(module:DoAction(i))
+			end
 		end
 	end)
 end
 
-CreateFrame("Button", "KeyboardUIActionsButton"):SetScript("OnClick", function()
+insecureButtons.Actions = CreateFrame("Button", "KeyboardUIActionsButton")
+insecureButtons.Actions:SetScript("OnClick", function()
 	local module = getCurrentModule()
-	if module and module:RefreshEntry() then
+	if module then
 		module:ttsStop()
 		local actions = {module:Actions()}
 		for i=1, 12 do
-			if actions[i] and actions[i] ~= "" then
+			if type(actions[i]) == "string" and actions[i] ~= "" then
 				local keybind = module:getOption("bindingDoAction"..i.."Button")
 				if keybind then
 					if keybind:sub(-2, -1) == "--" then
@@ -897,24 +807,19 @@ CreateFrame("Button", "KeyboardUIActionsButton"):SetScript("OnClick", function()
 	end
 end)
 
-CreateFrame("Button", "KeyboardUIReadTitleButton"):SetScript("OnClick", function()
+insecureButtons.ReadTitle = CreateFrame("Button", "KeyboardUIReadTitleButton")
+insecureButtons.ReadTitle:SetScript("OnClick", function()
 	local module = getCurrentModule()
 	if module then
-		module:ttsInterrupt(module:RefreshEntry() or "", KUI_NORMAL, KUI_MF)
+		module:ttsInterrupt(module:GetShortTitle(), KUI_NORMAL, KUI_MF)
 	end
 end)
 
-CreateFrame("Button", "KeyboardUIReadDescriptionButton"):SetScript("OnClick", function()
+insecureButtons.ReadDescription = CreateFrame("Button", "KeyboardUIReadDescriptionButton")
+insecureButtons.ReadDescription:SetScript("OnClick", function()
 	local module = getCurrentModule()
-	if module and module:RefreshEntry() then
-		local introduction, body, conclusion = module:GetEntryLongDescription()
-		if body or conclusion then
-			module:ttsInterrupt(introduction, KUI_QUICK, KUI_MF)
-			module:ttsQueue(body, KUI_CASUAL, KUI_MP)
-			module:ttsQueue(conclusion, KUI_NORMAL, KUI_MF)
-		else
-			module:ttsInterrupt(introduction, KUI_CASUAL, KUI_MF)
-		end
+	if module then
+		module:ttsExplain(module:GetLongDescription())
 	end
 end)
 
@@ -1015,6 +920,30 @@ function lib:findPrevInTable(tbl, index, criteria)
 	end
 end
 
+local lastKey
+
+local function onEditBoxKeyDown(editBox, key)
+	local alt = IsAltKeyDown() and "ALT-" or ""
+	local ctrl = IsControlKeyDown() and "CTRL-" or ""
+	local shift = IsShiftKeyDown() and "SHIFT-" or ""
+	local bindingAction = GetBindingByKey(alt .. ctrl .. shift .. key)
+	for name, button in pairs(insecureButtons) do
+		if bindingAction == "CLICK KeyboardUI" .. name .. "Button:LeftButton" then
+			editBox:ClearFocus()
+			button:Click()
+			return
+		end
+	end
+end
+
+function lib:overrideEditFocus(frame)
+	if frame:IsObjectType("EditBox") then
+		frame:HookScript("OnKeyDown", onEditBoxKeyDown)
+	end
+	for i=1, frame:GetNumChildren() do
+		self:overrideEditFocus(select(i, frame:GetChildren()))
+	end
+end
 
 -------------
 
@@ -1093,8 +1022,7 @@ end
 -------------------------
 -- Global mouse integration
 do
-	local onEnter, onEnterSayNPC, onEnterSayGroup, onEnterSayObject, onEnterSayUI, 
-		onEnterSayFullTooltip, onEnterPing, onEnterRequiresMouseMovement = true, true, true, true, true, true, true
+	local onEnter, onEnterSayNPC, onEnterSayGroup, onEnterSayObject, onEnterSayUI, onEnterSayFullTooltip, onEnterPing
 
 	-- World Frame
 	
@@ -1107,7 +1035,7 @@ do
 	local lastUIObjectLine
 	
 	local noTooltipTicker
-	
+		
 	local function stopMonitoringTooltip()
 		if not GameTooltip:IsShown() then
 			monitorNonPlayers = false
@@ -1260,26 +1188,27 @@ do
 		end
 	end
 		
-	lib:onOptionChanged("onEnter", setOnEnter)
+	-- option initialization
 	lib:onEvent("PLAYER_LOGIN", function()
-		OnEnterSayNPC = lib:getOption("onEnterSayNPC")
-		OnEnterSayObject = lib:getOption("onEnterSayObject")
-		OnEnterSayUI = lib:getOption("onEnterSayUI")
-		OnEnterSayFullTooltip = lib:getOption("onEnterSayFullTooltip")
-		OnEnterPing = lib:getOption("onEnterPing")
-		OnEnterRequiresMouseMovement = lib:getOption("onEnterRequiresMouseMovement")
-		
+		onEnterSayGroup = lib:getOption("onEnterSayGroup")
+		onEnterSayNPC = lib:getOption("onEnterSayNPC")
+		onEnterSayObject = lib:getOption("onEnterSayObject")
+		onEnterSayUI = lib:getOption("onEnterSayUI")
+		onEnterSayFullTooltip = lib:getOption("onEnterSayFullTooltip")
+		onEnterPing = lib:getOption("onEnterPing")
+
 		-- save this for last
 		setOnEnter(lib:getOption("onEnter"))
 	end)
 	
+	lib:onOptionChanged("onEnter", setOnEnter)
 	lib:onOptionChanged("onEnterSayGroup", function(value) onEnterSayGroup = value end)
 	lib:onOptionChanged("onEnterSayNPC", function(value) onEnterNPC = value end)
 	lib:onOptionChanged("onEnterSayObject", function(value) onEnterSayObject = value end)
 	lib:onOptionChanged("onEnterSayUI", function(value) onEnterSayUI = value end)
 	lib:onOptionChanged("onEnterSayFullTooltip", function(value) onEnterSayFullTooltip = value end)
 	lib:onOptionChanged("onEnterPing", function(value) onEnterPing = value end)
-	lib:onOptionChanged("onEnterRequiresMouseMovement", function(value) onEnterRequiresMouseMovement = value end)
+	
 end
 
 -------------------------
@@ -1381,13 +1310,15 @@ scrollChild:SetScript("OnShow", function()
 					frame.parent = parent[i]
 					frame.prev = frame.parent.last
 					frame.parent.last = frame
-					frame:SetPoint("LEFT", 30, 0)
-					frame:SetPoint("TOP", frame.prev or frame.parent, "BOTTOM", 0, -15)
-					parent:SetHeight(parent:GetHeight() + frame:GetHeight() + 15)
-					scrollChild:SetHeight(scrollChild:GetHeight() + frame:GetHeight() + 15)
+					frame:SetPoint("LEFT", 50, 0)
+					local anchorTo = frame.prev or frame.parent
+					local spacing = anchorTo:IsObjectType("Slider") and 12 or 6
+					frame:SetPoint("TOP", anchorTo, "BOTTOM", 0, -spacing)
+					parent:SetHeight(parent:GetHeight() + frame:GetHeight() + spacing)
+					scrollChild:SetHeight(scrollChild:GetHeight() + frame:GetHeight() + spacing)
 					tinsert(frame.parent, frame)
 					if frame.parent.next then
-						frame.parent.next:SetPoint("TOP", frame, "BOTTOM", 0, 20)
+						frame.parent.next:SetPoint("TOP", frame.parent.last, "BOTTOM", 0, frame.parent.last:IsObjectType("Slider") and -20 or -16)
 					end
 					if frame.parent:IsObjectType("CheckButton") and frame.Enable then
 						frame.module:onOptionChanged(parentOption, function(value)
@@ -1412,10 +1343,12 @@ scrollChild:SetScript("OnShow", function()
 		end
 		frame.prev = parent[#parent]
 		frame.prev.next = frame
-		frame:SetPoint("LEFT", 10, 0)
-		frame:SetPoint("TOP", frame.prev.last or frame.prev, "BOTTOM", 0, -20)
-		parent:SetHeight(parent:GetHeight() + frame:GetHeight() + 20)
-		scrollChild:SetHeight(scrollChild:GetHeight() + frame:GetHeight() + 20)
+		frame:SetPoint("LEFT", 25, 0)
+		local anchorTo = frame.prev.last or frame.prev
+		local spacing = anchorTo:IsObjectType("Slider") and 20 or 16
+		frame:SetPoint("TOP", anchorTo, "BOTTOM", 0, -spacing)
+		parent:SetHeight(parent:GetHeight() + frame:GetHeight() + spacing)
+		scrollChild:SetHeight(scrollChild:GetHeight() + frame:GetHeight() + spacing)
 		tinsert(parent, frame)
 	end
 
@@ -1435,6 +1368,7 @@ scrollChild:SetScript("OnShow", function()
 		frame.description = description
 		insertFrame(parent, frame, parentOption)
 		frame.text:SetText(title)
+		frame.text:SetTextColor(1,1,1)
 		frame:SetScript("OnEnter", function()
 			modules[1]:displayTooltip(frame, "Mouseover: " .. title, frame:GetChecked() and "Checked " or "Unchecked " .. CHAT_HEADER_SUFFIX .. frame.description, "ANCHOR_BOTTOMRIGHT", panel)
 		end)
@@ -1442,7 +1376,7 @@ scrollChild:SetScript("OnShow", function()
 		frame:SetScript("OnClick", function()
 			local checked = frame:GetChecked()
 			setTempOption(self, option, checked)
-			modules[1]:ttsInterrupt(checked and "Checked." or "Unchecked.", KUI_QUICK, KUI_MP, true)
+			modules[1]:ttsInterrupt(checked and "Checked." or "Unchecked.", KUI_QUICK, KUI_MP)
 		end)
 		self:onOptionChanged(option, function(value)
 			frame:SetChecked(value)
@@ -1550,8 +1484,7 @@ scrollChild:SetScript("OnShow", function()
 	modules[1]:panelCheckButton("onEnterSayObject", OBJECTIVES_LABEL, "Read out names of interactive objects.", "onEnter")
 	modules[1]:panelCheckButton("onEnterSayUI", UIOPTIONS_MENU, "Read out buttons and other UI objects.", "onEnter")
 	modules[1]:panelCheckButton("onEnterSayFullTooltip", ITEM_MOUSE_OVER, "Read the complete tooltip during mouseover, instead of waiting for ctrl-space.", "onEnter")
-	modules[1]:panelCheckButton("onEnterPing", SOUND, "Also make a clicking sound.")
-	modules[1]:panelCheckButton("onEnterRequireMouseMovement", ERR_USE_LOCKED_WITH_SPELL_S:format(BUTTON_LAG_MOVEMENT), "Read out names only when the mouse moved; never when something appears that is by chance under the mouse.", "onEnter")
+	modules[1]:panelCheckButton("onEnterPing", SOUND, "Make a clicking sound.", "onEnter")
 	
 	for i=2, #modules do
 		local module = modules[i]
@@ -1608,7 +1541,7 @@ function SlashCmdList.KEYBOARDUI(msg)
 		KeyboardUIOptions.global.bindingDoAction5Button, -- 10
 		KeyboardUIOptions.global.bindingDoAction1Button, -- 11
 		KeyboardUIOptions.global.bindingChangeTabButton -- 12
-	), KUI_NORMAL, KUI_MP, true)
+	), KUI_NORMAL, KUI_MP)
 end
 SLASH_KEYBOARDUI1 = "/keyboardui"
 SLASH_KEYBOARDUI2 = "/kui"
@@ -1677,7 +1610,7 @@ lib:onEvent("PLAYER_LOGIN", function()
 
 	C_Timer.After(7.5, function()
 		if not startNextTutorial() and UnitLevel("player") <= 30 then
-			lib:ttsQueue("For help with Keyboard UI, type: slash, K, U, I.", KUI_NORMAL, KUI_PP, true)
+			lib:ttsQueue("For help with Keyboard UI, type: slash, K, U, I.", KUI_NORMAL, KUI_PP)
 		end
 		playTutorial()
 	end)

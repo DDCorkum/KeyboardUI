@@ -35,6 +35,10 @@ local function moveHighlight(region)
 	highlightTexture:SetPoint("TOPLEFT", region)
 	highlightTexture:SetPoint("BOTTOMRIGHT", region)
 	highlightTexture:Show()
+	local top = highlightTexture:GetTop()
+	if top > QuestScrollFrame:GetTop() or highlightTexture:GetBottom() < QuestScrollFrame:GetBottom() then
+		ScrollFrame_SetScrollOffset(QuestScrollFrame, QuestScrollFrame.Contents:GetTop() - top)
+	end
 end
 
 local function clearHighlight()
@@ -49,17 +53,33 @@ local function highlightGroup()
 			return
 		end
 	end
+	for frame in QuestMapFrame.QuestsFrame.campaignHeaderFramePool:EnumerateActive() do
+		if frame.questLogIndex == group then
+			moveHighlight(frame.Text or frame)
+			return
+		end
+	end
+	for frame in QuestMapFrame.QuestsFrame.campaignHeaderMinimalFramePool:EnumerateActive() do
+		if frame.questLogIndex == group then
+			moveHighlight(frame.Text or frame)
+			return
+		end
+	end
 	clearHighlight()
 end
 
-local function highlightEntry()
+local function highlightEntryFunc()
 	for frame in QuestMapFrame.QuestsFrame.titleFramePool:EnumerateActive() do
 		if frame.questLogIndex == entry then
 			moveHighlight(frame)
 			return
 		end
 	end
+end
+
+local function highlightEntry()
 	clearHighlight()
+	C_Timer.After(0, highlightEntryFunc)
 end
 
 local function highlightAction()
@@ -234,21 +254,6 @@ function module:PrevEntry()
 	end
 end
 
-function module:RefreshEntry()
-	if quests[entry] then
-		if action == 0 then
-			if entry == group then
-				highlightGroup()
-			else
-				highlightEntry()
-			end
-		end
-		return quests[entry].title
-	else
-		clearHighlight()
-	end
-end
-
 function module:Forward()
 	if questID > 0 then
 		if QuestMapFrame.QuestsFrame:IsShown() then
@@ -334,7 +339,7 @@ function module:DoAction(hotkey)
 	end
 end
 
-function module:GetEntryLongDescription()
+function module:GetLongDescription()
 	if entry == 0 then
 		return "None selected", #quests == 0 and "The quest log is empty"
 	elseif questID > 0 then
@@ -345,7 +350,18 @@ function module:GetEntryLongDescription()
 end
 
 QuestMapFrame.QuestsFrame:HookScript("OnHide", function()
-	module:RefreshEntry()
+	if quests[entry] then
+		if action == 0 then
+			if entry == group then
+				highlightGroup()
+			else
+				highlightEntry()
+			end
+		end
+	else
+		entry = 0
+		clearHighlight()
+	end
 end)
 
 QuestMapFrame.DetailsFrame:HookScript("OnShow", function()
