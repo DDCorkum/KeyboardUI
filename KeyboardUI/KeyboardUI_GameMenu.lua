@@ -450,9 +450,10 @@ do
 
 	function module:Actions()
 		if entry > 0 then
-			if entry:IsObjectType("Slider") then
-				if entry:GetName() and _G[entry:GetName().."Low"] and _G[entry:GetName().."High"] then
-					return _G[entry:GetName().."Low"], _G[entry:GetName().."High"], nil, nil, OKAY, CANCEL, DEFAULTS
+			local frame = entries[entry]
+			if frame:IsObjectType("Slider") then
+				if frame:GetName() and _G[frame:GetName().."Low"] and _G[frame:GetName().."High"] then
+					return _G[frame:GetName().."Low"], _G[frame:GetName().."High"], nil, nil, OKAY, CANCEL, DEFAULTS
 				end
 			end
 		end

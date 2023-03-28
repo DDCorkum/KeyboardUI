@@ -896,7 +896,7 @@ local function getBagSlotText()
 		if itemEquipLoc ~= "" and not redText then
 			local itemSlot1, itemSlot2 = invTypeToSlot[itemEquipLoc], (itemEquipLoc ~= "INVTYPE_WEAPON" or CanDualWield()) and invTypeToSlot2[itemEquipLoc] or nil
 			local oldItemID1, oldItemID2 = itemSlot1 and GetInventoryItemID("player", itemSlot1), itemSlot2 and GetInventoryItemID("player", itemSlot2)
-			if oldItemID1 and oldItemID2 then
+			if oldItemID1 and oldItemID2 and oldItemID1 ~= 0 and oldItemID2 ~= 0 then
 				local oldName1, __, oldQuality1, oldLevel1 = GetItemInfo(oldItemID1)
 				local oldName2, __, oldQuality2, oldLevel2 = GetItemInfo(oldItemID2)
 				return ("%s (%s, %s). %s (%s, %s) %s %s (%s, %s)"):format(
@@ -911,8 +911,8 @@ local function getBagSlotText()
 					_G["ITEM_QUALITY"..oldQuality2.."_DESC"],
 					CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(oldLevel2)
 				)				
-			elseif oldItemID1 or oldItemID2 then
-				local oldName, __, oldQuality, oldLevel = GetItemInfo(oldItemID1 or oldItemID2)
+			elseif oldItemID1 and oldItemID1 ~= 0 or oldItemID2 and oldItemID2 ~= 0 then
+				local oldName, __, oldQuality, oldLevel = GetItemInfo(oldItemID1 ~= 0 and oldItemID1 or oldItemID2)
 				return ("%s (%s, %s). %s (%s, %s)"):format(
 					itemName,
 					_G["ITEM_QUALITY"..itemQuality.."_DESC"],
@@ -1160,7 +1160,7 @@ do
 			
 			local itemSlot1, itemSlot2 = invTypeToSlot[itemEquipLoc], (itemEquipLoc ~= "INVTYPE_WEAPON" or CanDualWield()) and invTypeToSlot2[itemEquipLoc] or nil
 			local oldItemID1, oldItemID2 = itemSlot1 and GetInventoryItemID("player", itemSlot1), itemSlot2 and GetInventoryItemID("player", itemSlot2)
-			if oldItemID1 then
+			if oldItemID1 and oldItemID1 ~= 0 then
 				-- oldItemID2 NYI
 				itemLoc:SetEquipmentSlot(itemSlot1)
 				local oldName = C_Item.GetItemName(itemLoc)
@@ -1285,8 +1285,8 @@ do
 			end
 			local text = 
 				numToBuy > 0 and ("%d %s; %s"):format(numToBuy, name, price)
-				or isPurchasable and ("%s; %s%s"):format(name, COSTS_LABEL, price)
-				or ("%s. %s"):format(name, UNAVAILABLE)
+				or isPurchasable and ("%s; %s%s"):format(name or UNKNOWN, COSTS_LABEL, price)
+				or ("%s. %s"):format(name or UNKNOWN, UNAVAILABLE)
 			if numToBuy == 0 and numAvailable > 0 then
 				text = text .. "; " .. (AUCTION_HOUSE_QUANTITY_AVAILABLE_FORMAT and AUCTION_HOUSE_QUANTITY_AVAILABLE_FORMAT:format(numAvailable) or (numAvailable .. " " .. AVAILABLE))
 			end
@@ -1309,6 +1309,7 @@ do
 		if MerchantFrame.selectedTab == 1 then
 			buybackSlot = nil
 			if MerchantFrame.page > merchantPage then
+				sellMode = false	-- in case players change merchant pages while in sell mode
 				merchantPage = MerchantFrame.page
 				if merchantPage > 1 then
 					merchantSlot = MERCHANT_ITEMS_PER_PAGE * (merchantPage - 1) + 1
@@ -1318,6 +1319,7 @@ do
 					module:ttsInterrupt(getMerchantSlotText())
 				end
 			elseif MerchantFrame.page < merchantPage then
+				sellMode = false
 				merchantPage = MerchantFrame.page
 				merchantSlot = MERCHANT_ITEMS_PER_PAGE * merchantPage
 				numToBuy = 0
