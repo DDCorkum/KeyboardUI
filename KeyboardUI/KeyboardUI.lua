@@ -19,66 +19,72 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
-10.06 (2023-02-04) by Dahk Celes
+### 10.07 (2023-03-28) by Dahk Celes
+- Mouseover tooltip text on more frames
+- Queue for normal and heroic dungeons, and looking for raid
+- Migrating ALT-V hotkey from WoWAccess to stop speaking text
+- New ALT-T hotkey to simulate right-clicking the target frame portrait
+
+### 10.06 (2023-02-04) by Dahk Celes
 - Follows game TTS voice settings
 - Adds mailboxes
 
-10.05 (2023-01-22) by Dahk Celes
+### 10.05 (2023-01-22) by Dahk Celes
 - Choose quest item rewards
 
-10.04 (2023-01-08) by Dahk Celes
+### 10.04 (2023-01-08) by Dahk Celes
 - Buy, sell and buyback at merchants
 
-10.03 (2022-12-27) by Dahk Celes
+### 10.03 (2022-12-27) by Dahk Celes
 - Updated the spellbook and bags for Dragonflight
 
-10.02 (2022-11-20) by Dahk Celes
+### 10.02 (2022-11-20) by Dahk Celes
 - Minor bugfixes
 
-10.01 (2022-11-15) by Dahk Celes
+### 10.01 (2022-11-15) by Dahk Celes
 - Updates for Dragonflight
 - Avoids forbidden frames
 
-0.10 (2022-05-03) by Dahk Celes
+### 0.10 (2022-05-03) by Dahk Celes
 - Adding NPC gossip and quest frames
 - Adding player talents in retail
 - Spell book bugfixes
 
-0.9 (2022-03-04) by Dahk Celes
+### 0.9 (2022-03-04) by Dahk Celes
 - Rudimentary keyboard navigation for the backpack and bags
 - Rudimentary support for the retail new player experience
 - Use spells directly from the spell book
 
-0.8 (2022-02-07) by Dahk Celes
+### 0.8 (2022-02-07) by Dahk Celes
 - Extended keyboard navigation to the system options
 - Various bug fixes including the quest log and closing windows
 
-0.7 (2022-02-04) by Dahk Celes
+### 0.7 (2022-02-04) by Dahk Celes
 - More TTS when hovering over the game world and UI
 - More control over TTS volume and rate
 - New modules: game menu and interface options
 
-0.6 (2022-01-27) by Dahk Celes
+### 0.6 (2022-01-27) by Dahk Celes
 - Spell book and action bar improvements
 - Soft-spoken TTS when hovering over UI elements
 
-0.5 (2022-01-23) by Dahk Celes
+### 0.5 (2022-01-23) by Dahk Celes
 - New module: spell book and action bars
 - Attempts to use /tts preferred voice setting
 - Better text recognition for special popups like logging out
 
-0.4 (2022-01-15) by Dahk Celes
+### 0.4 (2022-01-15) by Dahk Celes
 - Secure keybinds outside combat.
 - New module: drop down menus
 
-0.3 (2022-01-13) by Dahk Celes
+### 0.3 (2022-01-13) by Dahk Celes
 - Small tweaks and bug fixes
 - First version to be publicly visible
 
-0.2 (2022-01-12) by Dahk Celes
+### 0.2 (2022-01-12) by Dahk Celes
 - Rewrote the core addon using lessons learned from the proof of concept
 
-0.1 (2022-01-03) by Dahk Celes
+### 0.1 (2022-01-03) by Dahk Celes
 - Initial alpha version / proof of concept
 
 --]]
@@ -165,6 +171,12 @@ local globalDefaults =
 	
 	-- Option toggle keybinds
 	bindingToggleOnEnterButton = "ALT-O",
+	
+	-- Additional keybinds
+	enableRightClickTargetFrame = true,
+	bindingRightClickTargetFrame = "ALT-T",
+	enableStopSpeakingText = true,
+	bindingStopSpeakingText = "ALT-V",
 }
 
 -------------------------
@@ -237,8 +249,11 @@ function lib:updatePriorityKeybinds()
 				if type(button) == "function" then
 					button = button()
 				end
+				if type(button) == "table" then
+					button = button:GetName()
+				end
 				if option and button then
-					SetOverrideBindingClick(self.frame, true, option, type(button) == "string" and button or button:GetName())
+					SetOverrideBindingClick(self.frame, true, option, button)
 				end
 			end
 		end
@@ -647,9 +662,17 @@ function lib:ttsUnblock()
 end
 
 function lib:ttsStopMessage(text)
-	if text and ttsFrame.current == text then
-		C_VoiceChat.StopSpeakingText()
-		ttsFrame.current = nil
+	if text then
+		if	ttsFrame.current == text then
+			C_VoiceChat.StopSpeakingText()
+			ttsFrame.current = nil
+		elseif #ttsFrame > 0 then
+			for i=#ttsFrame, 1, -1 do
+				if ttsFrame[#ttsFrame][2] == text then
+					tremove(ttsFrame, i)
+				end
+			end
+		end
 	end
 end
 
@@ -847,30 +870,52 @@ lib:onEvent("PLAYER_LOGIN", function()
 end)
 
 
+-------------------------
+-- Persistant Secure Keybinds
 
---[[
--- general keybindings (non-override)
-_G["BINDING_HEADER_KeyboardUI"] = "Keyboard UI"
-_G["BINDING_NAME_CLICK KeyboardUIToggleOnEnterButton"] = "Alt Text"
+local persistantKeybinds = CreateFrame("Button", "KeyboardUIPersistantKeybinds", nil, "SecureFrameTemplate")
+persistantKeybinds.postFuncs = {}
+persistantKeybinds:HookScript("OnClick", function(__, button)
+	if persistantKeybinds.postFuncs[button] then
+		persistantKeybinds.postFuncs[button]()
+	end
+end)
 
-_G["BINDING_NAME_CLICK KeyboardUIChangeTabButton:LeftButton"] = --
-_G["BINDING_NAME_CLICK KeyboardUINextGroupButton:LeftButton"] = BROWSER_FORWARD_TOOLTIP
-_G["BINDING_NAME_CLICK KeyboardUIPrevGroupButton:LeftButton"] = BROWSER_BACK_TOOLTIP
-_G["BINDING_NAME_CLICK KeyboardUINextEntryButton:LeftButton"] = NEXT .. " " .. ENCOUNTER_JOURNAL_ITEM
-_G["BINDING_NAME_CLICK KeyboardUIPrevEntryButton:LeftButton"] = PREV .. " " .. ENCOUNTER_JOURNAL_ITEM
-_G["BINDING_NAME_CLICK KeyboardUIForwardButton:LeftButton"] = BINDING_NAME_ACTIONWINDOWINCREMENT
-_G["BINDING_NAME_CLICK KeyboardUIBackwardButton:LeftButton"] = BINDING_NAME_ACTIONWINDOWDECREMENT
-_G["BINDING_NAME_CLICK KeyboardUIDoActionButton:LeftButton"] = SUBMIT .. " / " .. CONTINUE
-_G["BINDING_NAME_CLICK KeyboardUIDoAction1Button:LeftButton"] = CHOOSE .. " 1"
-_G["BINDING_NAME_CLICK KeyboardUIDoAction2Button:LeftButton"] = CHOOSE .. " 2"
-_G["BINDING_NAME_CLICK KeyboardUIDoAction3Button:LeftButton"] = CHOOSE .. " 3"
-_G["BINDING_NAME_CLICK KeyboardUIDoAction4Button:LeftButton"] = CHOOSE .. " 4"
-_G["BINDING_NAME_CLICK KeyboardUIDoAction5Button:LeftButton"] = CHOOSE .. " 5"
-_G["BINDING_NAME_CLICK KeyboardUIActionsButton:LeftButton"] = SAY .. " " .. OPTIONS
-_G["BINDING_NAME_CLICK KeyboardUIReadTitleButton:LeftButton"] = SAY .. " " .. NAME
-_G["BINDING_NAME_CLICK KeyboardUIReadDescriptionButton:LeftButton"] = SAY .. " " .. DESCRIPTION
---]]
 
+local function addPersistantKeybind(option, command, postFunc)
+	command = command or ("CLICK KeyboardUIPersistantKeybinds:" .. option)
+	persistantKeybinds.postFuncs[option] = postFunc
+	
+	local enabled
+	local keybind
+	
+	local function enableFunc(value)
+		enabled = value
+		if keybind then
+			lib:afterCombat(SetOverrideBinding, KeyboardUIPersistantKeybinds, false, keybind, value and command or nil)
+		end
+	end
+	
+	local function bindingFunc(value)
+		if enabled then
+			local oldKeybind = keybind
+			lib:afterCombat(SetOverrideBinding, persistantKeybinds, oldKeybind, nil) 
+			lib:afterCombat(SetOverrideBinding, persistantKeybinds, value, command)
+		end
+		keybind = value
+	end
+	
+	lib:onOptionChanged("enable"..option, enableFunc)
+	lib:onOptionChanged("binding"..option, bindingFunc)
+	
+	lib:onEvent("PLAYER_LOGIN", function()
+		keybind = lib:getOption("binding"..option)
+		enableFunc(lib:getOption("enable"..option))
+	end)	
+end
+
+addPersistantKeybind("RightClickTargetFrame", "CLICK TargetFrame:RightButton", nil)
+addPersistantKeybind("StopSpeakingText", nil, function() lib:ttsStop() end)
 
 -------------------------
 -- Misc helper functions
@@ -1006,14 +1051,23 @@ end
 
 -- Executes func() right away if _G[frame] exists, or after _G[trigger] happens for the first time.
 function lib:hookWhenFirstLoaded(frame, trigger, func)
-	if (_G[frame]) then
+	if _G[frame] then
 		func(self, _G[frame])
 		return true;
-	elseif (type("trigger") == "string" and _G[trigger]) then
-		hooksecurefunc(trigger, function()
-			func(self, _G[frame])
-			func = nop
-		end)
+	elseif type("trigger") == "string" then
+		if type(_G[trigger]) == "function" then
+			hooksecurefunc(trigger, function()
+				func(self, _G[frame])
+				func = nop
+			end)
+		else
+			self:onEvent("ADDON_LOADED", function(addonName)
+				if addonName == trigger then
+					func(self, _G[frame])
+					func = nop
+				end
+			end)
+		end
 		return true;
 	end
 	return false;
@@ -1142,8 +1196,46 @@ do
 				local text = 
 					mouseFocus:IsForbidden() and UNKNOWN
 					or mouseFocus.GetText and mouseFocus:GetText() 
-					or type(mouseFocus.text) == "table" and mouseFocus.text.GetText and mouseFocus.text:GetText()
-					or type(mouseFocus.Text) == "table" and mouseFocus.Text.GetText and mouseFocus.Text:GetText()
+					--or type(mouseFocus.text) == "table" and mouseFocus.text.GetText and mouseFocus.text:GetText()
+					--or type(mouseFocus.Text) == "table" and mouseFocus.Text.GetText and mouseFocus.Text:GetText()
+					--or type(mouseFocus.Label) == "table" and mouseFocus.Label.GetText and mouseFocus.Label:GetText()
+					--or type(mouseFocus.Description) == "table" and mouseFocus.Description.GetText and mouseFocus.Description:GetText()
+					--or type(mouseFocus.HeaderText) == "table" and mouseFocus.HeaderText.GetText and mouseFocus.HeaderText:GetText()
+				if not text then
+					local frames = {mouseFocus}
+					local texts = {}
+					local i=1
+					while frames[i] do
+						for __, child in ipairs({frames[i]:GetChildren()}) do
+							if child:IsMouseOver() and child:IsVisible() then
+								tinsert(frames, child)
+							end
+						end
+						for __, region in ipairs({frames[i]:GetRegions()}) do
+							if region.GetText and region:GetText() and region:GetText() ~= "" and region:IsVisible() then
+								tinsert(texts, region:GetText())
+							end
+						end
+						i = i+1
+					end
+					if #texts > 0 then
+						text = table.concat(texts, "; ")
+					end
+				end
+				if not text and mouseFocus:IsObjectType("Button") then
+					local parent = mouseFocus:GetParent()
+					if parent then
+						local texts = {}
+						for __, region in ipairs({parent:GetRegions()}) do
+							if region.GetText and region:GetText() and region:GetText() ~= "" and region:IsVisible() then
+								tinsert(texts, region:GetText())
+							end
+						end
+						if #texts > 0 then
+							text = table.concat(texts, "; ")
+						end
+					end
+				end
 				if text then
 					if lib:ttsYield(text, KUI_RAPID, KUI_PP) then
 						lastUIObjectLine = 2
@@ -1485,6 +1577,9 @@ scrollChild:SetScript("OnShow", function()
 	modules[1]:panelCheckButton("onEnterSayUI", UIOPTIONS_MENU, "Read out buttons and other UI objects.", "onEnter")
 	modules[1]:panelCheckButton("onEnterSayFullTooltip", ITEM_MOUSE_OVER, "Read the complete tooltip during mouseover, instead of waiting for ctrl-space.", "onEnter")
 	modules[1]:panelCheckButton("onEnterPing", SOUND, "Make a clicking sound.", "onEnter")
+	
+	modules[1]:panelCheckButton("enableRightClickTargetFrame", L["PRESS_TO"]:format(ALT_KEY_TEXT.."-T", "toggle menu on current target"), "Enables a keyboard shortcut to simulate right-clicking on your current target's portrait, opening an options menu.  You can also target yourself, your pet, or party members to open up additional options with this keybind.")
+	modules[1]:panelCheckButton("enableStopSpeakingText", L["PRESS_TO"]:format(ALT_KEY_TEXT.."-V", MUTE), "Enables a keyboard shortcut to stop the current text to speech message.")
 	
 	for i=2, #modules do
 		local module = modules[i]

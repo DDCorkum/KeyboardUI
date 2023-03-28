@@ -12,7 +12,11 @@ KeyboardUI.lua
 KeyboardUI_StaticPopup.lua
 KeyboardUI_UIDropDownMenu.lua
 
-# Frames
+# Common Frames
 KeyboardUI_GameMenu.lua
 KeyboardUI_Actions.lua
 KeyboardUI_Dialog.lua
+
+# Retail Frames
+#KeyboardUI_QuestLog.lua
+#KeyboardUI_LFG.lua
