@@ -895,10 +895,10 @@ local function getBagSlotText()
 		local redText = moduleUsingBags:getFirstRedTooltipLine("GetBagItem", getBagAndSlot())
 		if itemEquipLoc ~= "" and not redText then
 			local itemSlot1, itemSlot2 = invTypeToSlot[itemEquipLoc], (itemEquipLoc ~= "INVTYPE_WEAPON" or CanDualWield()) and invTypeToSlot2[itemEquipLoc] or nil
-			local oldItemID1, oldItemID2 = itemSlot1 and GetInventoryItemID("player", itemSlot1), itemSlot2 and GetInventoryItemID("player", itemSlot2)
-			if oldItemID1 and oldItemID2 and oldItemID1 ~= 0 and oldItemID2 ~= 0 then
-				local oldName1, __, oldQuality1, oldLevel1 = GetItemInfo(oldItemID1)
-				local oldName2, __, oldQuality2, oldLevel2 = GetItemInfo(oldItemID2)
+			local oldItemLink1, oldItemLink2 = itemSlot1 and GetInventoryItemLink("player", itemSlot1), itemSlot2 and GetInventoryItemLink("player", itemSlot2)
+			if oldItemLink1 and oldItemLink2 then
+				local oldName1, __, oldQuality1, oldLevel1 = GetItemInfo(oldItemLink1)
+				local oldName2, __, oldQuality2, oldLevel2 = GetItemInfo(oldItemLink2)
 				return ("%s (%s, %s). %s (%s, %s) %s %s (%s, %s)"):format(
 					itemName,
 					_G["ITEM_QUALITY"..itemQuality.."_DESC"],
@@ -911,8 +911,8 @@ local function getBagSlotText()
 					_G["ITEM_QUALITY"..oldQuality2.."_DESC"],
 					CHARACTER_LINK_ITEM_LEVEL_TOOLTIP:format(oldLevel2)
 				)				
-			elseif oldItemID1 and oldItemID1 ~= 0 or oldItemID2 and oldItemID2 ~= 0 then
-				local oldName, __, oldQuality, oldLevel = GetItemInfo(oldItemID1 ~= 0 and oldItemID1 or oldItemID2)
+			elseif oldItemLink1 or oldItemLink2 then
+				local oldName, __, oldQuality, oldLevel = GetItemInfo(oldItemLink1 or oldItemLink2)
 				return ("%s (%s, %s). %s (%s, %s)"):format(
 					itemName,
 					_G["ITEM_QUALITY"..itemQuality.."_DESC"],
@@ -1159,9 +1159,9 @@ do
 			local itemLevel = C_Item.GetCurrentItemLevel(itemLoc)	
 			
 			local itemSlot1, itemSlot2 = invTypeToSlot[itemEquipLoc], (itemEquipLoc ~= "INVTYPE_WEAPON" or CanDualWield()) and invTypeToSlot2[itemEquipLoc] or nil
-			local oldItemID1, oldItemID2 = itemSlot1 and GetInventoryItemID("player", itemSlot1), itemSlot2 and GetInventoryItemID("player", itemSlot2)
-			if oldItemID1 and oldItemID1 ~= 0 then
-				-- oldItemID2 NYI
+			local oldItemLink1, oldItemLink2 = itemSlot1 and GetInventoryItemLink("player", itemSlot1), itemSlot2 and GetInventoryItemLink("player", itemSlot2)
+			if oldItemLink1 then
+				-- oldItemLink2 NYI
 				itemLoc:SetEquipmentSlot(itemSlot1)
 				local oldName = C_Item.GetItemName(itemLoc)
 				local oldQuality = C_Item.GetItemQuality(itemLoc)

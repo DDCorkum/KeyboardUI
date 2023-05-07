@@ -21,6 +21,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 
 ### 10.08 (2023-05-07) by Dahk Celes
 - Quest log fixes and updates for 10.1.0
+- Proper item levels for equipped items
 
 ### 10.07 (2023-03-28) by Dahk Celes
 - Mouseover tooltip text on more frames
