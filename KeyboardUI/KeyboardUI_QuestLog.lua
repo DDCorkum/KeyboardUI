@@ -35,9 +35,46 @@ local function moveHighlight(region)
 	highlightTexture:SetPoint("TOPLEFT", region)
 	highlightTexture:SetPoint("BOTTOMRIGHT", region)
 	highlightTexture:Show()
-	local top = highlightTexture:GetTop()
-	if top > QuestScrollFrame:GetTop() or highlightTexture:GetBottom() < QuestScrollFrame:GetBottom() then
-		ScrollFrame_SetScrollOffset(QuestScrollFrame, QuestScrollFrame.Contents:GetTop() - top)
+	if QuestScrollFrame.ScrollBar.OnStepperMouseDown then
+		if highlightTexture:GetTop() and highlightTexture:GetBottom() then
+			local function goBack()
+				if highlightTexture:GetTop() > QuestScrollFrame:GetTop() then
+					QuestScrollFrame.ScrollBar:ScrollInDirection(0.05,-1)
+					C_Timer.After(0.01, goBack)
+				end
+			end
+			goBack()
+			local function goForward()
+				if highlightTexture:GetBottom() < QuestScrollFrame:GetBottom() then
+					QuestScrollFrame.ScrollBar:ScrollInDirection(0.05,1)
+					C_Timer.After(0.01, goForward)
+				end
+			end
+			goForward()
+		else
+			print("huh?")
+		end
+	--[[
+		while top > QuestScrollFrame:GetTop() do
+			QuestScrollFrame.ScrollBar.Back:Click()
+		end
+		while highlightTexture:GetBottom() < QuestScrollFrame:GetBottom() do
+			QuestScrollFrame.ScrollBar.Forward:Click()
+		end
+		--]]
+		--[[if QuestScrollFrame.ScrollBar.SetScrollPercentage then
+			local contentsTop, contentsHeight = QuestScrollFrame.Contents:GetTop(), QuestScrollFrame.Contents:GetHeight()
+			local scrollPercent = (contentsTop - top)/contentsHeight*100
+			if top > QuestScrollFrame:GetTop() and
+			QuestScrollFrame.ScrollBar:SetScrollPercentage(scrollPercent)
+		else--]]
+
+
+	else
+		local top = highlightTexture:GetTop() or 0
+		if top > QuestScrollFrame:GetTop() or highlightTexture:GetBottom() < QuestScrollFrame:GetBottom() then
+			ScrollFrame_SetScrollOffset(QuestScrollFrame, QuestScrollFrame.Contents:GetTop() - top)
+		end
 	end
 end
 
@@ -259,7 +296,7 @@ function module:Forward()
 		if QuestMapFrame.QuestsFrame:IsShown() then
 			QuestMapFrame_ShowQuestDetails(questID)
 			action = 0
-			return module:GetEntryLongDescription()
+			return module:GetLongDescription()
 		end
 		for i=1, 3 do
 			if (action+i)%3 == 1 then
@@ -285,7 +322,7 @@ function module:Backward()
 	if questID > 0 then
 		if QuestMapFrame.QuestsFrame:IsShown() then
 			QuestMapFrame_ShowQuestDetails(questID)
-			return module:GetEntryLongDescription()
+			return module:GetLongDescription()
 		end	
 		action = action + 3		--resolves an edge case
 		for i=2, 0, -1 do
@@ -333,7 +370,7 @@ function module:DoAction(hotkey)
 		elseif QuestMapFrame.QuestsFrame:IsShown() then
 			QuestMapFrame_ShowQuestDetails(questID)
 			clearHighlight()
-			return module:GetEntryLongDescription()
+			return module:GetLongDescription()
 		end
 		clearHighlight()
 	end
@@ -394,7 +431,8 @@ module.frame:SetScript("OnEvent", function(__, event)
 		for i=1, C_QuestLog.GetNumQuestLogEntries() do
 			quests[i] = C_QuestLog.GetInfo(i)
 			if quests[i].questID > 0 then
-				quests[i].description, quests[i].objectives = GetQuestLogQuestText(i)
+				local desc, obj = GetQuestLogQuestText(i)
+				quests[i].description, quests[i].objectives = desc and desc:gsub("[\<\>]", " "), obj and obj:gsub("[\<\>]", " ")
 			else
 				quests[i].title = "Header - " .. quests[i].title
 			end
