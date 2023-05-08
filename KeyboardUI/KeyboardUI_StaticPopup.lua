@@ -54,14 +54,22 @@ local function isVisible(frame)
 	return frame:IsVisible()
 end
 
+local function getPopupText()
+	if currentPopup < 4 then
+		return popups[currentPopup].text:GetText()
+	else
+		return (LFGDungeonReadyDialogInstanceInfoFrameName:GetText() or "") .. " " .. (LFGDungeonReadyDialogInstanceInfoFrameStatusText:GetText() or "") .. " " .. (LFGDungeonReadyDialogYourRoleDescription:GetText() or "")
+	end
+end
+
 function module:NextEntry()
 	local newPopup = module:findNextInTable(popups, currentPopup, isVisible)
 	if newPopup and newPopup ~= currentPopup then
 		currentPopup, currentButton = newPopup, 0
 		module:updatePriorityKeybinds()
-		return popups[currentPopup].text:GetText()	
+		return getPopupText()
 	elseif currentPopup > 0 then
-		return popups[currentPopup].text:GetText()
+		return getPopupText()
 	end
 end
 
@@ -70,23 +78,16 @@ function module:PrevEntry()
 	if newPopup and newPopup ~= currentPopup then
 		currentPopup, currentButton = newPopup, 0
 		module:updatePriorityKeybinds()
-		return popups[currentPopup].text:GetText()	
+		return getPopupText()
 	elseif currentPopup > 0 then
-		return popups[currentPopup].text:GetText()
+		return getPopupText()
 	end
 end
 
 function module:GetShortTitle()
-	return currentPopup > 0 and popups[currentPopup].text:GetText()
+	return currentPopup > 0 and getPopupText()
 end
 
-local function getPopupText()
-	if currentPopup < 4 then
-		return popups[currentPopup].text:GetText()
-	else
-		return (LFGDungeonReadyDialogInstanceInfoFrameName:GetText() or "") .. " " .. (LFGDungeonReadyDialogInstanceInfoFrameStatusText:GetText() or "") .. " " .. (LFGDungeonReadyDialogYourRoleDescription:GetText() or "")
-	end
-end
 function module:GetLongDescription()
 	if currentPopup > 0 then
 		local tbl = {}
