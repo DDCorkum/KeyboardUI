@@ -18,12 +18,13 @@ local KeyboardUI = select(2, ...)
 local currentPopup, currentButton = 0, 0
 local hasBeenMultiplePopups
 
-local popups = {StaticPopup1, StaticPopup2, StaticPopup3}
+local popups = {StaticPopup1, StaticPopup2, StaticPopup3, LFGDungeonReadyDialog}
 local buttons =
 {
 	{StaticPopup1.button1, StaticPopup1.button2, StaticPopup1.button3, StaticPopup1.button4},
 	{StaticPopup2.button1, StaticPopup2.button2, StaticPopup2.button3, StaticPopup2.button4},
 	{StaticPopup3.button1, StaticPopup3.button2, StaticPopup3.button3, StaticPopup3.button4},
+	LFGDungeonReadyDialog and {LFGDungeonReadyDialogEnterDungeonButton, LFGDungeonReadyDialogLeaveQueueButton},
 }
 
 local module =
@@ -35,13 +36,14 @@ local module =
 		CreateFrame("Frame", nil, StaticPopup1),
 		CreateFrame("Frame", nil, StaticPopup2),
 		CreateFrame("Frame", nil, StaticPopup3),
+		LFGDungeonReadyDialog and CreateFrame("Frame", nil, LFGDungeonReadyDialog),
 	},
 	secureButtons =
 	{
-		bindingDoAction1Button = function() return currentPopup > 0 and buttons[currentPopup][1]:IsVisible() and buttons[currentPopup][1] end,
-		bindingDoAction2Button = function() return currentPopup > 0 and buttons[currentPopup][2]:IsVisible() and buttons[currentPopup][2] end,
-		bindingDoAction3Button = function() return currentPopup > 0 and buttons[currentPopup][3]:IsVisible() and buttons[currentPopup][3] end,
-		bindingDoAction4Button = function() return currentPopup > 0 and buttons[currentPopup][4]:IsVisible() and buttons[currentPopup][4] end,
+		bindingDoAction1Button = function() return currentPopup == 4 and buttons[4][1] or currentPopup > 0 and buttons[currentPopup][1]:IsVisible() and buttons[currentPopup][1] end,
+		bindingDoAction2Button = function() return currentPopup == 4 and buttons[4][2] or currentPopup > 0 and buttons[currentPopup][2]:IsVisible() and buttons[currentPopup][2] end,
+		bindingDoAction3Button = function() return currentPopup > 0 and currentPopup < 4 and buttons[currentPopup][3]:IsVisible() and buttons[currentPopup][3] end,
+		bindingDoAction4Button = function() return currentPopup > 0 and currentPopup < 4 and buttons[currentPopup][4]:IsVisible() and buttons[currentPopup][4] end,
 		bindingDoActionButton = function() return currentButton > 0 and buttons[currentPopup][currentButton] end,
 	},
 }
@@ -52,14 +54,22 @@ local function isVisible(frame)
 	return frame:IsVisible()
 end
 
+local function getPopupText()
+	if currentPopup < 4 then
+		return popups[currentPopup].text:GetText()
+	else
+		return (LFGDungeonReadyDialogInstanceInfoFrameName:GetText() or "") .. " " .. (LFGDungeonReadyDialogInstanceInfoFrameStatusText:GetText() or "") .. " " .. (LFGDungeonReadyDialogYourRoleDescription:GetText() or "")
+	end
+end
+
 function module:NextEntry()
 	local newPopup = module:findNextInTable(popups, currentPopup, isVisible)
 	if newPopup and newPopup ~= currentPopup then
 		currentPopup, currentButton = newPopup, 0
 		module:updatePriorityKeybinds()
-		return popups[currentPopup].text:GetText()	
+		return getPopupText()
 	elseif currentPopup > 0 then
-		return popups[currentPopup].text:GetText()
+		return getPopupText()
 	end
 end
 
@@ -68,14 +78,14 @@ function module:PrevEntry()
 	if newPopup and newPopup ~= currentPopup then
 		currentPopup, currentButton = newPopup, 0
 		module:updatePriorityKeybinds()
-		return popups[currentPopup].text:GetText()	
+		return getPopupText()
 	elseif currentPopup > 0 then
-		return popups[currentPopup].text:GetText()
+		return getPopupText()
 	end
 end
 
 function module:GetShortTitle()
-	return currentPopup > 0 and popups[currentPopup].text:GetText()
+	return currentPopup > 0 and getPopupText()
 end
 
 function module:GetLongDescription()
@@ -88,7 +98,7 @@ function module:GetLongDescription()
 			end
 		end
 		local delim = " " .. QUEST_LOGIC_OR .. " "
-		return "Popup: " .. popups[currentPopup].text:GetText() .. " " .. table.concat(tbl, delim)
+		return "Popup: " ..getPopupText() .. " " .. table.concat(tbl, delim)
 	end
 end
 
@@ -144,14 +154,19 @@ function module:DoAction(index)
 end
 
 local function popupOnShow(frame)
-	currentPopup, currentButton = frame:GetID(), 0
+	currentPopup = frame == LFGDungeonReadyDialog and 4 or frame:GetID()
+	currentButton = 0
 	module:updatePriorityKeybinds()
-	if frame.text:GetText() == "" or frame.text:GetText() == " " then
-		C_Timer.After(0.1, function()
-			module:ttsInterrupt("Popup! " .. frame.text:GetText())
-		end)
-	else
-		module:ttsInterrupt("Popup! " .. frame.text:GetText())
+	if currentPopup < 4 then
+		if frame.text:GetText() == "" or frame.text:GetText() == " " then
+			C_Timer.After(0.1, function()
+				module:ttsInterrupt("Popup! " .. getPopupText())
+			end)
+		else
+			module:ttsInterrupt("Popup! " .. getPopupText())
+		end
+	else -- if currentPopup == 4
+		module:ttsInterrupt("Dungeon! " .. getPopupText())
 	end
 end
 
@@ -160,7 +175,7 @@ local function popupOnHide(frame)
 		currentPopup, currentButton = module:findNextInTable(popups, currentPopup, isVisible) or 0, 0
 		if currentPopup > 0 then
 			module:updatePriorityKeybinds()
-			module:ttsInterrupt("Another popup! " .. popups[currentPopup].text:GetText())
+			module:ttsInterrupt("Another popup! " .. getPopupText())
 		end
 	end
 end
