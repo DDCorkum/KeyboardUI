@@ -68,14 +68,27 @@ KeyboardUI:RegisterModule(module)
 function module:NextGroup() end
 function module:PrevGroup() end
 
+local function hasRole()
+	if pveGroup == 1 then 
+		return LFDQueueFrameRoleButtonTank.checkButton:GetChecked() or LFDQueueFrameRoleButtonHealer.checkButton:GetChecked() or LFDQueueFrameRoleButtonDPS.checkButton:GetChecked()
+	elseif pveGroup == 2 then
+		return RaidFinderQueueFrameRoleButtonTank.checkButton:GetChecked() or RaidFinderQueueFrameRoleButtonHealer.checkButton:GetChecked() or RaidFinderQueueFrameRoleButtonDPS.checkButton:GetChecked()
+	elseif pvpGroup == 2 then
+		return HonorFrameRoleButtonTank.checkButton:GetChecked() or HonorFrameRoleButtonHealer.checkButton:GetChecked() or HonorFrameRoleButtonDPS.checkButton:GetChecked()
+	elseif pvpGroup == 2 then
+		return ConquestFrameRoleButtonTank.checkButton:GetChecked() or ConquestFrameRoleButtonHealer.checkButton:GetChecked() or ConquestFrameRoleButtonDPS.checkButton:GetChecked()
+	end
+	return nil
+end
+
 function module:Forward()
 	if tab == 1 and pveGroup < 3 then
 		if action < 2 then
 			action = action + 1
 			self:updatePriorityKeybinds()
 			local frame = self.secureButtons.bindingDoActionButton()
-			if frame then
-				return action == 1 and UIDropDownMenu_GetText(frame:GetParent()) or action == 2 and frame:GetText()
+			if frame then	
+				return action == 1 and UIDropDownMenu_GetText(frame:GetParent()) or action == 2 and frame:GetText(), action == 2 and not hasRole() and (INSTANCE_UNAVAILABLE_SELF_NO_SPEC .. ". " .. L["PRESS_HOTKEYS"]:format(module:getOption("bindingActionsButton")))
 			end
 		end
 	else
@@ -90,11 +103,31 @@ function module:Backward()
 			self:updatePriorityKeybinds()
 			local frame = self.secureButtons.bindingDoActionButton()
 			if frame then
-				return action == 1 and UIDropDownMenu_GetText(frame:GetParent()) or action == 2 and frame:GetText()
+				return action == 1 and UIDropDownMenu_GetText(frame:GetParent()) or action == 2 and frame:GetText(), action == 2 and not hasRole() and INSTANCE_UNAVAILABLE_SELF_NO_SPEC
 			end
 		end
 	else
 		return ERR_USE_LOCKED_WITH_ITEM_S:format(MOUSE_LABEL)
+	end
+end
+
+function module:Actions()
+	return TANK, HEALER, DAMAGER
+end
+
+function module:DoAction(index)
+	local roleButton =
+		index == 1 and (pveGroup == 1 and LFDQueueFrameRoleButtonTank.checkButton or pveGroup == 2 and RaidFinderQueueFrameRoleButtonTank.checkButton or pvpGroup == 1 and HonorFrame.TankIcon.checkButton or pvpGroup == 2 and ConquestFrame.TankIcon.checkButton)
+		or index == 2 and (pveGroup == 1 and LFDQueueFrameRoleButtonHealer.checkButton or pveGroup == 2 and RaidFinderQueueFrameRoleButtonHealer.checkButton or pvpGroup == 1 and HonorFrame.HealerIcon.checkButton or pvpGroup == 2 and ConquestFrame.HealerIcon.checkButton)
+		or index == 3 and (pveGroup == 1 and LFDQueueFrameRoleButtonDPS.checkButton or pveGroup == 2 and RaidFinderQueueFrameRoleButtonDPS.checkButton or pvpGroup == 1 and HonorFrame.DPSIcon.checkButton or pvpGroup == 2 and ConquestFrame.DPSIcon.checkButton)
+	if roleButton then
+		if roleButton:IsVisible() and roleButton:IsEnabled() then
+			roleButton:Click()
+			local role = (index == 1 and TANK or index == 2 and HEALER or DAMAGER)
+			return roleButton:GetChecked() and QUEUED_FOR:format(role) or (role .. " unchecked")
+		else
+			return YOUR_CLASS_MAY_NOT_PERFORM_ROLE
+		end
 	end
 end
 
@@ -132,3 +165,36 @@ module:hookWhenFirstLoaded(PVPQueueFrame, "Blizzard_PVPUI", function()
 		end
 	end)
 end)
+
+module:registerTutorial(
+	function()
+		if tonumber(GetStatistic(932) or 0) + tonumber(GetStatistic(933) or 0) + tonumber(GetStatistic(934) or 0) + tonumber(GetStatistic(838) or 0) > 5 then
+			return nil
+		else
+			return PVEFrame:IsShown()
+		end
+	end,
+	{
+		function(__, played) 
+			if played then
+				return nil
+			elseif pveGroup == 1 or pveGroup == 2 then
+				local canTank, canHeal, canDPS = C_LFGList.GetAvailableRoles()
+				if (canTank and canHeal or canTank and canDPS or canHeal and canDPS) then
+					return L["PRESS_TO"]:format(module:getOption("bindingActionsButton"), CHOOSE .. " " .. CLASS_ROLES) .. "; " .. AND .. L["PRESS_TO"]:format(module:getOption("bindingForwardButton") .. CHOOSE .. " " .. INSTANCE)
+				else
+					return L["PRESS_TO"]:format(module:getOption("bindingForwardButton"), CHOOSE .. " " .. INSTANCE)
+				end
+			elseif pvpGroup == 1 or pvpGroup == 2 then
+				local canTank, canHeal, canDPS = C_LFGList.GetAvailableRoles()
+				if (canTank and canHeal or canTank and canDPS or canHeal and canDPS) then
+					return L["PRESS_TO"]:format(module:getOption("bindingActionsButton"), CHOOSE .. " " .. CLASS_ROLES)
+				else
+					return false
+				end			
+			else
+				return false
+			end
+		end,
+	}
+)

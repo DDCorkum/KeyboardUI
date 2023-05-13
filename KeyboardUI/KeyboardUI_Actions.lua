@@ -274,7 +274,7 @@ do
 		local spellType, id = GetSpellBookItemInfo(slotWithOffset, bookType)
 		if flyout == 0 then
 			if spellType == "SPELL" then
-				return longDesc and module:concatTooltipLines("GetSpellBookItem", slotWithOffset, bookType) or GetSpellInfo(id)
+				return longDesc and module:concatTooltipLines("GetSpellBookItem", slotWithOffset, bookType) or GetSpellBookItemName(slotWithOffset, bookType)
 			elseif spellType == "FUTURESPELL" then
 				local name, __, __, __, minLevel = GetSpellInfo(id)
 				return longDesc and module:concatTooltipLines("GetSpellBookItem", slotWithOffset, bookType) or name .. " (" .. UNKNOWN .. ")."

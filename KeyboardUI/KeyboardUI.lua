@@ -19,6 +19,9 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+### 10.09 (2023-05-13) by Dahk Celes
+- Choose roles when looking for group
+
 ### 10.08 (2023-05-08) by Dahk Celes
 - Quest log fixes and updates for 10.1.0
 - Proper item levels for equipped items
@@ -1662,6 +1665,7 @@ local function startNextTutorial()
 		if val then
 			currentTutorial = tutorialChapters[trigger]
 			tutorialChapters[trigger] = nil
+			currentTutorial.played = {}
 			return currentTutorial
 		elseif val == nil then
 			tutorialChapters[trigger] = nil
@@ -1683,9 +1687,10 @@ local function playTutorial()
 					return
 				end
 			else
-				local val = currentTutorial[i]()
+				local val = currentTutorial[i](i, currentTutorial.played[i])
 				if type(val) == "string" then
 					if (val ~= currentTutorialMsg or GetTime() - currentTutorialMsgTime > 12) and not InCombatLockdown() and lib:ttsYield(val, KUI_SLOW, KUI_MP) then
+						currentTutorial.played[i] = true
 						currentTutorialMsg = val
 						currentTutorialMsgTime = GetTime()
 					end
