@@ -172,7 +172,7 @@ end)
 
 module:registerTutorial(
 	function()
-		if tonumber(GetStatistic(932) or 0) + tonumber(GetStatistic(933) or 0) + tonumber(GetStatistic(934) or 0) + tonumber(GetStatistic(838) or 0) > 5 then
+		if (tonumber((GetStatistic(932))) or 0) + (tonumber((GetStatistic(933))) or 0) + (tonumber((GetStatistic(934))) or 0) + (tonumber((GetStatistic(838))) or 0) > 5 then
 			return nil
 		else
 			return PVEFrame:IsShown()
@@ -185,7 +185,7 @@ module:registerTutorial(
 			elseif pveGroup == 1 or pveGroup == 2 then
 				local canTank, canHeal, canDPS = C_LFGList.GetAvailableRoles()
 				if (canTank and canHeal or canTank and canDPS or canHeal and canDPS) then
-					return L["PRESS_TO"]:format(module:getOption("bindingActionsButton"), CHOOSE .. " " .. CLASS_ROLES) .. "; " .. AND .. L["PRESS_TO"]:format(module:getOption("bindingForwardButton") .. CHOOSE .. " " .. INSTANCE)
+					return L["PRESS_TO"]:format(module:getOption("bindingActionsButton"), CHOOSE .. " " .. CLASS_ROLES) .. ". " .. L["PRESS_TO"]:format(module:getOption("bindingForwardButton"), CHOOSE .. " " .. INSTANCE)
 				else
 					return L["PRESS_TO"]:format(module:getOption("bindingForwardButton"), CHOOSE .. " " .. INSTANCE)
 				end

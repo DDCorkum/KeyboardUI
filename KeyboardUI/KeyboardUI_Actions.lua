@@ -274,7 +274,12 @@ do
 		local spellType, id = GetSpellBookItemInfo(slotWithOffset, bookType)
 		if flyout == 0 then
 			if spellType == "SPELL" then
-				return longDesc and module:concatTooltipLines("GetSpellBookItem", slotWithOffset, bookType) or GetSpellBookItemName(slotWithOffset, bookType)
+				if longDesc then
+					return module:concatTooltipLines("GetSpellBookItem", slotWithOffset, bookType)
+				else
+					name, rank = GetSpellBookItemName(slotWithOffset, bookType)
+					return (rank or "") .. " " .. name
+				end
 			elseif spellType == "FUTURESPELL" then
 				local name, __, __, __, minLevel = GetSpellInfo(id)
 				return longDesc and module:concatTooltipLines("GetSpellBookItem", slotWithOffset, bookType) or name .. " (" .. UNKNOWN .. ")."
@@ -739,9 +744,16 @@ do
 	hooksecurefunc ("SpellBookFrame_Update", function()
 		if book == 1 and tab ~= SpellBookFrame.selectedSkillLine then
 			setTab(SpellBookFrame.selectedSkillLine)
-			module:ttsYield((GetSpellTabInfo(tab) or "General") .. " - " .. getEntryText())
+			module:ttsInterrupt((GetSpellTabInfo(tab) or "General") .. " - " .. getEntryText())
 		end
 	end)
+	
+	if ShowAllSpellRanksCheckBox then
+		ShowAllSpellRanksCheckBox:HookScript("OnClick", function()
+			SpellBookFrame:Hide()
+			SpellBookFrame:Show()
+		end)
+	end
 
 end
 
