@@ -112,7 +112,11 @@ function module:Backward()
 end
 
 function module:Actions()
-	return TANK, HEALER, DAMAGER
+	local canTank, canHeal, canDPS = C_LFGList.GetAvailableRoles()
+	return
+		canTank and FOR_SPECIALIZATION:format(TANK) or (TANK .. " " .. ERR_ROLE_UNAVAILABLE),
+		canHeal and FOR_SPECIALIZATION:format(HEALER) or (HEALER .. " " .. ERR_ROLE_UNAVAILABLE),
+		canDPS and FOR_SPECIALIZATION:format(DAMAGER) or (DAMAGER .. " " .. ERR_ROLE_UNAVAILABLE)
 end
 
 function module:DoAction(index)
@@ -124,7 +128,7 @@ function module:DoAction(index)
 		if roleButton:IsVisible() and roleButton:IsEnabled() then
 			roleButton:Click()
 			local role = (index == 1 and TANK or index == 2 and HEALER or DAMAGER)
-			return roleButton:GetChecked() and QUEUED_FOR:format(role) or (role .. " unchecked")
+			return roleButton:GetChecked() and (role .. " " .. SLASH_TEXTTOSPEECH_ENABLED) or (role .. " " .. ADDON_DISABLED)
 		else
 			return YOUR_CLASS_MAY_NOT_PERFORM_ROLE
 		end
