@@ -107,13 +107,13 @@ local function getAllActionSlotTexts(canReplace)
 			REPLACES_SPELL:format(getActionText(prevBar*12 + 2)),
 			REPLACES_SPELL:format(getActionText(prevBar*12 + 3)),
 			"etcetera", -- 4
-			nil, --  5
-			nil, --  6
-			nil, --  7
-			nil, --  8
-			nil, --  9
-			nil, -- 10
-			nil, -- 11
+			"", --  5
+			"", --  6
+			"", --  7
+			"", --  8
+			"", --  9
+			"", -- 10
+			"", -- 11
 			REPLACES_SPELL:format(getActionText(prevBar*12 + 12))
 	else
 		return
@@ -121,13 +121,13 @@ local function getAllActionSlotTexts(canReplace)
 			getActionText(prevBar*12 + 2),
 			getActionText(prevBar*12 + 3),
 			"etcetera", -- 4
-			nil, --  5
-			nil, --  6
-			nil, --  7
-			nil, --  8
-			nil, --  9
-			nil, -- 10
-			nil, -- 11
+			"", --  5
+			"", --  6
+			"", --  7
+			"", --  8
+			"", --  9
+			"", -- 10
+			"", -- 11
 			getActionText(prevBar*12 + 12)
 	end
 end
@@ -176,6 +176,7 @@ do
 	local book, tab, slot, flyout = 0, 0, 0, 0
 	
 	local useActionSlots = false
+	local clearActionSlotMode = false
 
 	local positions = {[0] = SPELLS_PER_PAGE}		-- 1, 3, 5, 7, 9, 11, 2, 4, 6, 8, 10, 12... but the last one is in position 0 because the math is modulo 12.
 	for i=1, SPELLS_PER_PAGE-1, 2 do
@@ -236,7 +237,7 @@ do
 					end
 				end
 			end,
-			bindingPrevEntryButton = function() return book ~= 2 and getPosition() == 1 and flyout < 2 and "SpellBookPrevPageButton" end,
+			bindingPrevEntryButton = function() return book ~= 2 and getPosition() == 1 and slot > 1 and flyout < 2 and "SpellBookPrevPageButton" end,
 		},
 		secureCommands =
 		{
@@ -272,7 +273,14 @@ do
 		local slotWithOffset = book == 3 and slot or (slot + select(3, GetSpellTabInfo(tab)))
 		local bookType = book == 3 and BOOKTYPE_PET or BOOKTYPE_SPELL
 		local spellType, id = GetSpellBookItemInfo(slotWithOffset, bookType)
-		if flyout == 0 then
+		if clearActionSlotMode then
+			if module.firstTimeClearing and not longDesc then
+				return "Clear action bar"
+			else
+				module.firstTimeClearing = true
+				return "Clear action bar", "Use ctrl-right and ctrl-enter, or alt-space, to clear action bar slots."
+			end
+		elseif flyout == 0 then
 			if spellType == "SPELL" then
 				if longDesc then
 					return module:concatTooltipLines("GetSpellBookItem", slotWithOffset, bookType)
@@ -372,7 +380,7 @@ do
 	end
 
 	local function showGlow()
-		local button = flyout > 0 and spellFlyout[flyout] or book == 2 and slot > 0 and getProfessionButton() or slot > 0 and _G["SpellButton"..getPosition()]
+		local button = flyout > 0 and spellFlyout[flyout] or book == 2 and slot > 0 and getProfessionButton() or slot > 0 and not clearActionSlotMode and _G["SpellButton"..getPosition()]
 		if button then
 			if button.AbilityHighlight then
 				button.AbilityHighlight:Show()
@@ -388,7 +396,7 @@ do
 	end
 
 	local function hideGlow()
-		local button = flyout > 0 and spellFlyout[flyout] or book == 2 and slot > 0 and getProfessionButton() or slot > 0 and _G["SpellButton"..getPosition()]
+		local button = flyout > 0 and spellFlyout[flyout] or book == 2 and slot > 0 and getProfessionButton() or slot > 0 and not clearActionSlotMode and _G["SpellButton"..getPosition()]
 		if button and button.AbilityHighlight then
 			button.AbilityHighlight:Hide()
 		end
@@ -417,7 +425,7 @@ do
 	end
 
 	local function checkIfFlyoutNeeded(reverseDirection)
-		if SpellFlyout and book == 1 then
+		if SpellFlyout and book == 1 and not clearActionSlotMode then
 			local type, id = GetSpellBookItemInfo(slot + select(2, getPositionInBook()), 1)
 			if type == "FLYOUT" then
 				setSpellFlyout(id)
@@ -458,6 +466,7 @@ do
 		end
 		flyout = 0
 		useActionSlots = false
+		clearActionSlotMode = false
 		checkIfFlyoutNeeded(false)
 		showGlow()
 		module:updatePriorityKeybinds()
@@ -470,6 +479,7 @@ do
 		slot = book ~= 2 and (SpellBook_GetCurrentPage() - 1) * SPELLS_PER_PAGE + 1 or 1
 		flyout = 0
 		useActionSlots = false
+		clearActionSlotMode = false
 		checkIfFlyoutNeeded(false)
 		showGlow()
 		module:updatePriorityKeybinds()
@@ -484,6 +494,7 @@ do
 		slot = val
 		flyout = 0
 		useActionSlots = false
+		clearActionSlotMode = false
 		checkIfFlyoutNeeded(goingBackward)
 		showGlow()
 		module:updatePriorityKeybinds()
@@ -493,6 +504,7 @@ do
 		hideGlow()
 		flyout = val
 		useActionSlots = false
+		clearActionSlotMode = false
 		showGlow()
 		module:updatePriorityKeybinds()
 	end
@@ -544,6 +556,9 @@ do
 			--else
 			--	return module:NextGroup()
 			end	
+		elseif clearActionSlotMode then
+			clearActionSlotMode = false
+			return getEntryText()
 		elseif flyout > 0 and flyout < MAX_FLYOUTS and spellFlyout[flyout+1]:IsShown() then
 			setFlyout(flyout + 1)
 			return getEntryText()
@@ -573,6 +588,9 @@ do
 			return getEntryText()
 		elseif slot > 1 then
 			setSlot(slot - 1, GOING_BACKWARD)
+			return getEntryText()
+		elseif book == 1 and slot == 1 then
+			clearActionSlotMode = true
 			return getEntryText()
 		end
 	end
@@ -615,9 +633,12 @@ do
 			useActionSlot = true
 			self:updatePriorityKeybinds()
 			return module:DoAction()
+		elseif clearActionSlotMode and action > 0 then
+			PickupAction(action)
+			ClearCursor()
 		elseif slot > 0 and action > 0 then
 			if flyout > 0 then
-				local foo, flyoutID = GetSpellBookItemInfo(
+				local __, flyoutID = GetSpellBookItemInfo(
 					book == 3 and slot or slot + select(3, GetSpellTabInfo(tab)),
 					book == 3 and BOOKTYPE_PET or BOOKTYPE_SPELL
 				)
@@ -641,15 +662,16 @@ do
 		end
 	end
 
-	local firstTime = true
-	local function announce(self, book)
-		if self:IsVisible() then
-			if firstTime and UnitLevel("player") <= 5 then
-				firstTime = false
-				module:ttsInterrupt(book)
+	local function announce(bookTitle, abilityTitle)
+		if SpellBookFrame:IsVisible() then
+			module:ttsYield(bookTitle)
+			module:ttsQueue(abilityTitle)
+			if module:shouldPlayHint("SpellBookKeybinds", 1, 5, nil, 1) then
 				module:ttsQueue(([=[Use %s and %s to choose a spell, and use %s and %s to choose an action bar slot.  %s puts the chosen spell in the chosen action bar slot.]=]):format(module:getOption("bindingNextEntryButton"), module:getOption("bindingPrevEntryButton"), module:getOption("bindingForwardButton"), module:getOption("bindingBackwardButton"), module:getOption("bindingDoActionButton")), KUI_NORMAL, KUI_MP)
-			else
-				module:ttsYield(book)
+			elseif module:shouldPlayHint("ActionSlotHotkey", 6, nil, nil, 2) then
+				module:ttsQueue("Tip: " .. L["PRESS_HOTKEYS"]:format(module:getOption("bindingActionsButton")))
+			elseif book == 1 and slot == 1 and module:shouldPlayHint("ClearActionSlot", 10, nil, nil, 2) then
+				module:ttsQueue("Tip: there is a hidden function to clear action slots, found by using " .. module:getOption("bindingPrevEntryButton") .. " to scroll before the beginning of the spell book.")
 			end
 			if TutorialQueue and TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd then
 				module:ttsQueue(NPEV2_SPELLBOOKREMINDER:format(GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd)), KUI_NORMAL, KUI_MP)
@@ -657,48 +679,20 @@ do
 		end
 	end
 
-	-- temporary, to be merged into KeyboardUI_Actions.lua to include a tutorial on changing action bar slots
-	module:registerTutorial(
-		function()
-			if UnitLevel("player") > 5 then
-				return nil
-			else
-				return TutorialQueue and TutorialQueue.currentTutorial and (TutorialQueue.currentTutorial.spellToAdd or false)
-			end
-		end,
-		{
-			function() return TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd and SpellBookFrame:IsShown() or L["PRESS_TO"]:format(GetBindingKey("TOGGLESPELLBOOK") or "", NPEV2_SPELLBOOK_ADD_SPELL:format(GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd))) end,
-			function() return TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd and slot > 0 or L["PRESS_TO"]:format(module:getOption("bindingNextEntryButton"), CHOOSE .. CHAT_HEADER_SUFFIX .. GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd)) end,
-			function() return TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd and action > 0 or L["PRESS_TO"]:format(module:getOption("bindingForwardButton"), CHOOSE .. CHAT_HEADER_SUFFIX .. BINDING_HEADER_ACTIONBAR) end,
-		}
-	)
 
-
-	SpellBookSpellIconsFrame:Hide()
-	SpellBookSpellIconsFrame:HookScript("OnShow", function(self)
-		if SpellBookFrame.bookType == BOOKTYPE_SPELL then
+	hooksecurefunc("SpellBookFrame_Update", function()
+		local bookType = SpellBookFrame.bookType
+		if bookType == BOOKTYPE_SPELL and book ~= 1 then
 			setBook(1)
-			announce(self, SPELLBOOK .. " - " .. getEntryText())
-		else -- BOOKTYPE_PET
-			setBook(3)
-			announce(self, PET .. " - " .. getEntryText())
-		end
-	end)
-
-	SpellBookSpellIconsFrame:HookScript("OnHide", function(self)
-		if book == 1 then
-			setBook(nil)
-		end
-	end)
-
-	if SpellBookProfessionFrame then
-		-- Retail only
-		SpellBookProfessionFrame:Hide()
-		SpellBookProfessionFrame:HookScript("OnShow", function(self)
+			announce(SPELLBOOK, getEntryText())
+		elseif bookType == BOOKTYPE_PROFESSION and book ~= 2 then
 			setBook(2)
-			announce(self, TRADE_SKILLS .. " - " .. getEntryText())
-		end)
-	end
+			announce(TRADE_SKILLS, getEntryText())
+		elseif bookType == BOOKTYPE_PET and book ~= 3 and HasPetSpells() then
+			setBook(3)
+			announce(PET, getEntryText())
+		end
+	end)
 
 	SpellBookFrame:HookScript("OnHide", function()
 		setBook(nil)
@@ -732,15 +726,6 @@ do
 		end)
 	end
 
-	hooksecurefunc("ToggleSpellBook", function(bookType)
-		if bookType == BOOKTYPE_SPELL and book ~= 1 then
-			setBook(1)
-		elseif bookType == BOOKTYPE_PET and book ~= 3 and HasPetSpells() then
-			setBook(3)
-		end
-		-- BOOKTYPE_PROFESSION is not actually necessary, because the profession frame is guaranteed to appear
-	end)
-
 	hooksecurefunc ("SpellBookFrame_Update", function()
 		if book == 1 and tab ~= SpellBookFrame.selectedSkillLine then
 			setTab(SpellBookFrame.selectedSkillLine)
@@ -755,6 +740,22 @@ do
 		end)
 	end
 
+	-- temporary, to be merged into KeyboardUI_Actions.lua to include a tutorial on changing action bar slots
+	module:registerTutorial(
+		function()
+			if UnitLevel("player") > 5 then
+				return nil
+			else
+				return TutorialQueue and TutorialQueue.currentTutorial and (TutorialQueue.currentTutorial.spellToAdd or false)
+			end
+		end,
+		{
+			function() return TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd and SpellBookFrame:IsShown() or L["PRESS_TO"]:format(GetBindingKey("TOGGLESPELLBOOK") or "", NPEV2_SPELLBOOK_ADD_SPELL:format(GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd))) end,
+			function() return TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd and slot > 0 or L["PRESS_TO"]:format(module:getOption("bindingNextEntryButton"), CHOOSE .. CHAT_HEADER_SUFFIX .. GetSpellInfo(TutorialQueue.currentTutorial.spellToAdd)) end,
+			function() return TutorialQueue.currentTutorial and TutorialQueue.currentTutorial.spellToAdd and action > 0 or L["PRESS_TO"]:format(module:getOption("bindingForwardButton"), CHOOSE .. CHAT_HEADER_SUFFIX .. BINDING_HEADER_ACTIONBAR) end,
+		}
+	)
+	
 end
 
 
@@ -1211,35 +1212,32 @@ do
 		end
 	end
 	
-	MerchantFrame:HookScript("OnShow", function()
-		module.frame:Hide()
-	end)
+	-- put here any frames which should take precedence over the normal bags module
+	local superiorFrames =
+	{
+		MerchantFrame,
+		SpellBookFrame,
+		GossipFrame,
+		ProfessionsFrame,
+	}
 	
-	MerchantFrame:HookScript("OnHide", function()
-		if not SpellBookFrame:IsShown() and not GossipFrame:IsShown() then
-			module.frame:Show()
+	local function onSuperiorFrameShown()
+		module.frame:Hide()
+	end
+	
+	local function onSuperiorFrameHidden()
+		for i=1, #superiorFrames do
+			if superiorFrames[i]:IsShown() then
+				return
+			end
 		end
-	end)
+		module.frame:Show()		-- reaching this implies none of the superior frames were shown
+	end
 	
-	SpellBookFrame:HookScript("OnShow", function()
-		module.frame:Hide()
-	end)
-	
-	SpellBookFrame:HookScript("OnHide", function()
-		if not MerchantFrame:IsShown() and not GossipFrame:IsShown() then
-			module.frame:Show()
-		end
-	end)
-	
-	GossipFrame:HookScript("OnShow", function()
-		module.frame:Hide()
-	end)
-	
-	GossipFrame:HookScript("OnHide", function()
-		if not SpellBookFrame:IsShown() and not MerchantFrame:IsShown() then
-			module.frame:Show()
-		end	
-	end)
+	for i=1, #superiorFrames do
+		superiorFrames[i]:HookScript("OnShow", onSuperiorFrameShown)
+		superiorFrames[i]:HookScript("OnHide", onSuperiorFrameHidden)
+	end
 	
 end
 
@@ -1887,6 +1885,146 @@ end
 
 
 -------------------------
+-- ProfessionsFrame (Retail)
+
+if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
+
+	local module =
+	{
+		name = "ProfessionsFrame",
+		title = PROFESSION,
+		deferredFrame = "ProfessionsFrame",
+		deferredTrigger = "Blizzard_Professions",		
+	}
+	
+	KeyboardUI:RegisterModule(module)
+
+	local function getTab()
+		return ProfessionsFrame:GetTab()
+	end
+	
+	local function setTab(id)
+		ProfessionsFrame:SetTab(id)
+		return ProfessionsFrame.TabSystem:GetTabButton(id).Text:GetText()
+	end
+	
+	local function getTabShown(id)
+		return ProfessionsFrame:GetTabButton(id):IsShown() and ProfessionsFrame:GetTabButton(id):IsEnabled()
+	end
+
+	function module:ChangeTab()
+		local tab = getTab()
+		if getTabShown((tab%3)+1) then
+			setTab((tab%3)+1)
+		elseif getTabShown(((tab%3)+1)%3+1) then
+			setTab(((tab%3)+1)%3+1)
+		end
+	end
+	
+	local function getSchematicText(fullDesc)
+		local tab = getTab()
+		if tab == 1 then
+			local frame = ProfessionsFrame.CraftingPage.SchematicForm
+			return
+				frame.OutputText:IsShown() and frame.OutputText:GetText() or frame.RecraftingOutputText:IsShown() and frame.RecraftingOutputText:GetText(),
+				fullDesc and (
+					frame.Description:IsShown() and frame.Description:GetText()
+					or frame.RecraftingDescription:IsShown() and frame.RecraftingDescription:GetText()
+				)
+		end
+	end
+
+	function module:NextEntry()
+		local tab = getTab()
+		if tab == 1 then
+			local sB = ProfessionsFrame.CraftingPage.RecipeList.selectionBehavior
+			local data = ProfessionsFrame.CraftingPage.RecipeList.ScrollBox:GetDataProvider()
+			for index = sB:HasSelection() and data:FindIndex(sB:GetFirstSelectedElementData())+1 or 1, data:GetSize() do
+				local elementData = data:Find(index)
+				if elementData and elementData.data.recipeInfo then
+					sB:SelectElementData(elementData)
+					return getSchematicText()
+				end
+			end
+		end
+	end
+	
+	function module:PrevEntry()
+		local tab = getTab()
+		if tab == 1 then
+			local sB = ProfessionsFrame.CraftingPage.RecipeList.selectionBehavior
+			local data = ProfessionsFrame.CraftingPage.RecipeList.ScrollBox:GetDataProvider()
+			if sB:HasSelection() then
+				for index = data:FindIndex(sB:GetFirstSelectedElementData())-1, 1, -1 do
+					local elementData = data:Find(index)
+					if elementData and elementData.data.recipeInfo then
+						sB:SelectElementData(elementData)
+						return getSchematicText()
+					end
+				end
+			end
+		end
+	end
+	
+	function module:FindEntry()
+		local tab = getTab()
+		if tab == 1 then
+			ProfessionsFrame.CraftingPage.RecipeList.SearchBox:SetFocus()
+		end
+	end
+	
+	function module:ClearFindEntry()
+		local tab = getTab()
+		if tab == 1 then
+			ProfessionsFrame.CraftingPage.RecipeList.SearchBox:SetText("")
+			ProfessionsFrame.CraftingPage.RecipeList.SearchBox:ClearFocus()
+		end
+	end
+	
+	function module:GetLongDescription()
+		return getSchematicText(true)
+	end
+	
+	function module:GetShortTitle()
+		return getSchematicText(false)
+	end
+	
+	ProfessionsFrame.CraftingPage.RecipeList.SearchBox:HookScript("OnEditFocusGained", function()
+		if module:shouldPlayHint("SearchBox", nil, nil, nil, 3) then
+			module:ttsQueue("Type a search filter and then press " .. module:getOption("bindingNextEntryButton") .. "to scroll the filtered list. " .. module:getOption("bindingClearFindEntryButton") .. " removes the filter.")
+		end
+	end)
+	
+	ProfessionsFrame.CraftingPage.RecipeList.SearchBox:HookScript("OnTextChanged", function(self, userInput)
+		if userInput then
+			local text = self:GetText()
+			module:ttsInterrupt(text)
+			C_Timer.After(0.5, function()
+				if self:GetText() == text then
+					local data = ProfessionsFrame.CraftingPage.RecipeList.ScrollBox:GetDataProvider()
+					local count = 0
+					for i=1, data:GetSize() do
+						local elementData = data:Find(i)
+						if elementData and elementData.data.recipeInfo then
+							count = count + 1
+							if count > 50 then
+								module:ttsQueue("many search matches; use a better query")
+								return
+							end
+						end
+					end
+					module:ttsQueue(count > 0 and (count .. " |4match:matches") or PROFESSIONS_NO_JOURNAL_ENTRIES)
+				end
+			end)
+		end
+	end)
+	
+	module:overrideEditFocus(ProfessionsFrame.CraftingPage.RecipeList.SearchBox)
+	
+end
+
+
+-------------------------
 -- PlayerTalentFrameSpecialization (Retail)
 
 if false then -- not yet updated for WoW 10.x -- WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
@@ -1904,7 +2042,7 @@ if false then -- not yet updated for WoW 10.x -- WOW_PROJECT_ID == WOW_PROJECT_M
 	
 	KeyboardUI:RegisterModule(module)
 	
-	module:hookWhenFirstLoaded("PlayerTalentFrameSpecialization", "TalentFrame_LoadUI", function()
+	module:hookWhenFirstLoaded("PlayerTalentFrameSpecialization", "Blizzard_TalentUI", function()
 		module.frame:SetParent(PlayerTalentFrameSpecialization)
 		
 		hooksecurefunc("PlayerTalentFrame_UpdateSpecFrame", function(self)
@@ -1980,7 +2118,7 @@ if false then -- not yet updated for WoW 10.x --  WOW_PROJECT_ID == WOW_PROJECT_
 	
 	KeyboardUI:RegisterModule(module)
 	
-	module:hookWhenFirstLoaded("PlayerTalentFrameTalents", "TalentFrame_LoadUI", function()
+	module:hookWhenFirstLoaded("PlayerTalentFrameTalents", "Blizzard_TalentUI", function()
 			module.frame:SetParent(PlayerTalentFrameTalents)
 	end)
 

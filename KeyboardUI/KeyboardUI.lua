@@ -19,6 +19,10 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+### 10.10 (2023-05-27) by Dahk Celes
+- Scroll and filter the professions frame
+- Clear action bar slots
+
 ### 10.09 (2023-05-14) by Dahk Celes
 - Choose roles when looking for group
 
@@ -158,6 +162,8 @@ local globalDefaults =
 	bindingPrevGroupButton = "CTRL-SHIFT-UP",
 	bindingNextEntryButton = "CTRL-DOWN",
 	bindingPrevEntryButton = "CTRL-UP",
+	bindingFindEntryButton = "CTRL-F",
+	bindingClearFindEntryButton = "CTRL-SHIFT-F",
 	bindingForwardButton = "CTRL-RIGHT",
 	bindingBackwardButton = "CTRL-LEFT",
 	bindingDoActionButton = "CTRL-ENTER",
@@ -221,6 +227,8 @@ local function enableOverrideKeybinds()
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevGroupButton, "KeyboardUIPrevGroupButton", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingNextEntryButton, "KeyboardUINextEntryButton", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingPrevEntryButton, "KeyboardUIPrevEntryButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingFindEntryButton, "KeyboardUIFindEntryButton", "LeftButton")
+		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingClearFindEntryButton, "KeyboardUIClearFindEntryButton", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingForwardButton, "KeyboardUIForwardButton", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingBackwardButton, "KeyboardUIBackwardButton", "LeftButton")
 		SetOverrideBindingClick(frame, false, KeyboardUIOptions.global.bindingDoActionButton, "KeyboardUIDoActionButton", "LeftButton")
@@ -298,9 +306,9 @@ local stratas = {
 }
 
 local function setFocus(module)
+	module:ttsInterrupt(module.title or module.name, KUI_QUICK, KUI_MF)
 	module:GainFocus()
 	module:updatePriorityKeybinds()
-	module:ttsYield(module.title or module.name, KUI_QUICK, KUI_MF)
 end
 
 local function clearFocus(module)
@@ -316,7 +324,7 @@ local function frameOnShow(frame)
 			enableOverrideKeybinds()
 			setFocus(frame.module)
 		end
-	elseif frame.priority > shownFrames[#shownFrames].priority then
+	elseif frame.priority >= shownFrames[#shownFrames].priority then
 		if InCombatLockdown() then
 			shownFrames[#shownFrames+1] = frame
 		else
@@ -326,7 +334,7 @@ local function frameOnShow(frame)
 		end
 	else
 		local i = 1
-		while shownFrames[i] and shownFrames[i].priority < frame.priority do
+		while shownFrames[i] and shownFrames[i].priority <= frame.priority do
 			i = i + 1
 		end
 		tinsert(shownFrames, i, frame)
@@ -360,23 +368,17 @@ local function updateFrameStrataAndLevel(frame)
 	end
 end
 
--- module.name		string
--- module.title 	string		defaults to module.name
--- module.frame		Frame
--- module.frames	Frame[]		substitute for module.frame
+-- module.name				string
+-- module.title 			string		defaults to module.name
+-- module.frame				Frame
+-- module.frames			Frame[]		substitute for module.frame
+-- module.deferredFrame		string		substitute for module.frame; a global name for a frame that is in a load-on-demand addon
+-- module.deferredTrigger	string		name of the load-on-demand addon when using module.deferredFrame
 
-function KeyboardUI:RegisterModule(module, optIndex)
-	assert(type(module.name) == "string" and (module.frame and module.frame:IsObjectType("Frame") or module.frames) and not modules[module.name], "Invalid module registration")
-	if optIndex then
-		tinsert(modules, optIndex, module)
-		module.id = optIndex
-		for i=optIndex+1, #modules do
-			modules[i].id = i
-		end
-	else
-		tinsert(modules, module)
-		module.id = #modules
-	end
+function KeyboardUI:RegisterModule(module)
+	assert(type(module.name) == "string" and (module.frame and module.frame:IsObjectType("Frame") or module.frames or module.deferredFrame and module.deferredTrigger) and not modules[module.name], "Invalid module registration")
+	tinsert(modules, module)
+	module.id = #modules
 	modulesByName[module.name] = module
 	
 	setmetatable(module, {__index = lib})
@@ -390,6 +392,27 @@ function KeyboardUI:RegisterModule(module, optIndex)
 			hooksecurefunc(frame, "SetFrameStrata", updateFrameStrataAndLevel)
 			hooksecurefunc(frame, "SetFrameLevel", updateFrameStrataAndLevel)
 		end
+	elseif module.deferredFrame and module.deferredTrigger then
+		module.frame = CreateFrame("Frame")
+		module.frame.module = module
+		module.frame:Hide()
+		module:hookWhenFirstLoaded(module.deferredFrame, module.deferredTrigger, function(__, frame)
+			module.frame:SetParent(frame)
+			updateFrameStrataAndLevel(module.frame)
+			if KeyboardUIOptions[module.name] then
+				module:Init()
+				if KeyboardUIOptions[module.name]["enabled"] then
+					print("foo")
+					module.frame:Show()
+				end
+			else
+				module.frame:Show()
+			end
+			hooksecurefunc(module.frame, "SetFrameStrata", updateFrameStrataAndLevel)
+			hooksecurefunc(module.frame, "SetFrameLevel", updateFrameStrataAndLevel)
+			module.frame:HookScript("OnShow", frameOnShow)
+			module.frame:HookScript("OnHide", frameOnHide)
+		end)
 	else
 		module.frame.module = module
 		module.frame:HookScript("OnShow", frameOnShow)
@@ -484,7 +507,9 @@ lib:onEvent("ADDON_LOADED", function(arg1)
 				module.frame:Hide()
 			end
 			module:onOptionChanged("enabled", function(value) module.frame:SetShown(value) end)
-			module:Init()
+			if module.frame:GetParent() then
+				module:Init()
+			end
 		end
 		frame.numLoaded = #modules
 	elseif frame.numLoaded then
@@ -494,7 +519,9 @@ lib:onEvent("ADDON_LOADED", function(arg1)
 				modules[i].frame:Hide()
 			end
 			modules[i]:onOptionChanged("enabled", function(value) modules[i].frame:SetShown(value) end)
-			modules[i]:Init()
+			if modules[i].frame:GetParent() then
+				modules[i]:Init()
+			end
 		end
 	end
 end)
@@ -521,8 +548,7 @@ function lib:setDefault(option, value)
 end
 
 function lib:setOption(option, value)
-	assert(KeyboardUIOptions[self.name], "Keyboard UI: The ".. self.name " module tried to access KUI saved variables before module:Init().")
-	if type(option) == "string" and globalDefaults[option] == nil then
+	if type(option) == "string" and globalDefaults[option] == nil and KeyboardUIOptions[self.name] then
 		KeyboardUIOptions[self.name][option] = value
 		tempOptions[self.name][option] = nil
 	end
@@ -539,7 +565,7 @@ end
 -- Modules should override these as appropriate
 
 function lib:Init()
-	-- Fires when a module is permitted to begin accessing KeyboardUI saved variables using module:setOption().
+	-- Fires after ADDON_LOADED for both KUI and any load-on-demand frames that must be parented to
 end
 
 function lib:GainFocus()
@@ -575,6 +601,14 @@ end
 function lib:PrevEntry(...)
 	-- Override to navigate a list of entries, each with one or more actions.
 	return self:Backward(...)
+end
+
+function lib:FindEntry(...)
+	-- Override to find a specific entry using a search bar
+end
+
+function lib:ClearFindEntry(...)
+	-- Override to clear the search pattern, allowing all entries to be normally scrolled
 end
 
 function lib:GetShortTitle()
@@ -778,6 +812,22 @@ insecureButtons.PrevEntry:SetScript("OnClick", function()
 	end
 end)
 
+insecureButtons.FindEntry = CreateFrame("Button", "KeyboardUIFindEntryButton")
+insecureButtons.FindEntry:SetScript("OnClick", function()
+	local module = getCurrentModule()
+	if module then
+		module:ttsExplain(module:FindEntry())
+	end
+end)
+
+insecureButtons.ClearFindEntry = CreateFrame("Button", "KeyboardUIClearFindEntryButton")
+insecureButtons.ClearFindEntry:SetScript("OnClick", function()
+	local module = getCurrentModule()
+	if module then
+		module:ttsExplain(module:ClearFindEntry())
+	end
+end)
+
 insecureButtons.Forward = CreateFrame("Button", "KeyboardUIForwardButton")
 insecureButtons.Forward:SetScript("OnClick", function()
 	local module = getCurrentModule()
@@ -809,7 +859,7 @@ for i=1, 12 do
 		local module = getCurrentModule()
 		if module then
 			local action = select(i, module:Actions())
-			if type(action) == "string" and action ~= "" then
+			if type(action) == "string" then
 				module:ttsExplain(module:DoAction(i))
 			end
 		end
@@ -996,6 +1046,23 @@ function lib:overrideEditFocus(frame)
 	for i=1, frame:GetNumChildren() do
 		self:overrideEditFocus(select(i, frame:GetChildren()))
 	end
+end
+
+function lib:shouldPlayHint(key, minLevel, constantThrough, maxLevel, minTimesPlayed)
+	local level = UnitLevel("player")
+	if level >= (minLevel or 1) and level <= (maxLevel or 999) and not self["hintPlayed-" .. key] then
+		local timesPlayed = self:getOption("hintPlayed-" .. key) or 0 
+		if (
+			timesPlayed < (minTimesPlayed or 1)
+			or level <= (constantThrough or 0)
+			or random() < 1/((1 + level - (constrantThrough or minLevel or 1))^2)
+		) then
+			self:setOption("hintPlayed-" .. key, timesPlayed + 1)
+			self["hintPlayed-" .. key] = true
+			return true
+		end
+	end
+	return false
 end
 
 -------------
