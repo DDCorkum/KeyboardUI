@@ -1899,6 +1899,42 @@ if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 	
 	KeyboardUI:RegisterModule(module)
 
+	function module:Init()
+	
+		ProfessionsFrame.CraftingPage.RecipeList.SearchBox:HookScript("OnEditFocusGained", function()
+			if module:shouldPlayHint("SearchBox", nil, nil, nil, 3) then
+				module:ttsQueue("Type a search filter and then press " .. module:getOption("bindingNextEntryButton") .. "to scroll the filtered list. " .. module:getOption("bindingClearFindEntryButton") .. " removes the filter.")
+			end
+		end)
+
+		ProfessionsFrame.CraftingPage.RecipeList.SearchBox:HookScript("OnTextChanged", function(self, userInput)
+			if userInput then
+				local text = self:GetText()
+				module:ttsInterrupt(text)
+				C_Timer.After(0.5, function()
+					if self:GetText() == text then
+						local data = ProfessionsFrame.CraftingPage.RecipeList.ScrollBox:GetDataProvider()
+						local count = 0
+						for i=1, data:GetSize(false) do	 -- excludeCollapsed:false in TreeDataProviderMixin:GetData()
+							local elementData = data:Find(i, false)  -- excludeCollapsed:false in TreeDataProviderMixin:Find()
+							if elementData and elementData.data.recipeInfo then
+								count = count + 1
+								if count > 50 then
+									module:ttsQueue("many search matches; use a better query")
+									return
+								end
+							end
+						end
+						module:ttsQueue(count > 0 and (count .. " |4match:matches") or PROFESSIONS_NO_JOURNAL_ENTRIES)
+					end
+				end)
+			end
+		end)
+
+		module:overrideEditFocus(ProfessionsFrame.CraftingPage.RecipeList.SearchBox)
+		
+	end
+
 	local function getTab()
 		return ProfessionsFrame:GetTab()
 	end
@@ -1925,12 +1961,47 @@ if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 		local tab = getTab()
 		if tab == 1 then
 			local frame = ProfessionsFrame.CraftingPage.SchematicForm
-			return
-				frame.OutputText:IsShown() and frame.OutputText:GetText() or frame.RecraftingOutputText:IsShown() and frame.RecraftingOutputText:GetText(),
-				fullDesc and (
-					frame.Description:IsShown() and frame.Description:GetText()
-					or frame.RecraftingDescription:IsShown() and frame.RecraftingDescription:GetText()
-				)
+			if frame.OutputText:IsShown() then
+				if fullDesc then
+					local text = {frame.Description:GetText()}
+					for slot in frame.reagentSlotPool:EnumerateActive() do
+						local schematic = slot:GetReagentSlotSchematic()
+						if schematic.required then
+							tinsert(text, ("%s, %s"):format(GetItemInfo(schematic.reagents[1].itemID), ITEM_REQ_SKILL:format(schematic.quantityRequired)))
+							local found
+							for __, reagent in ipairs(schematic.reagents) do
+								local quantity = ProfessionsUtil.GetReagentQuantityInPossession(reagent)
+								local quality = select(2, GetItemInfo(reagent.itemID)):match("Tier(%d)")
+								if quality then
+									if quantity > 0 then
+										if found then
+											found = ("%s %s %d %s %s"):format(found, QUEST_LOGIC_AND, quantity, QUALITY, quality)
+										else
+											found = ("%s %d %s %s"):format(INVENTORY_TOOLTIP, quantity, QUALITY, quality)
+										end
+									end
+								elseif quantity > 0 then
+									found = ("%s %d"):format(INVENTORY_TOOLTIP, quantity)
+								end
+							end
+							tinsert(text, found or ("%s %s"):format(INVENTORY_TOOLTIP, NONE))
+						end
+					end
+					return frame.OutputText:GetText(), table.concat(text, "; ")
+				else
+					return frame.OutputText:GetText()
+				end
+			elseif frame.RecraftingOutputText:IsShown() then
+				if fullDesc then
+					local text =
+					{
+						frame.RecraftingDescription:GetText(),
+					}
+					return frame.RecraftingOutputText:GetText(), table.concat(text, "; ")
+				else
+					return frame.RecraftingOutputText:GetText()
+				end
+			end
 		end
 	end
 
@@ -1939,8 +2010,8 @@ if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 		if tab == 1 then
 			local sB = ProfessionsFrame.CraftingPage.RecipeList.selectionBehavior
 			local data = ProfessionsFrame.CraftingPage.RecipeList.ScrollBox:GetDataProvider()
-			for index = sB:HasSelection() and data:FindIndex(sB:GetFirstSelectedElementData())+1 or 1, data:GetSize() do
-				local elementData = data:Find(index)
+			for index = sB:HasSelection() and data:FindIndex(sB:GetFirstSelectedElementData(), false)+1 or 1, data:GetSize(false) do  -- false parameter required for TreeListDataProvider "excludeCollapsed"
+				local elementData = data:Find(index, false)
 				if elementData and elementData.data.recipeInfo then
 					sB:SelectElementData(elementData)
 					return getSchematicText()
@@ -1955,8 +2026,8 @@ if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 			local sB = ProfessionsFrame.CraftingPage.RecipeList.selectionBehavior
 			local data = ProfessionsFrame.CraftingPage.RecipeList.ScrollBox:GetDataProvider()
 			if sB:HasSelection() then
-				for index = data:FindIndex(sB:GetFirstSelectedElementData())-1, 1, -1 do
-					local elementData = data:Find(index)
+				for index = data:FindIndex(sB:GetFirstSelectedElementData(), false)-1, 1, -1 do
+					local elementData = data:Find(index, false)
 					if elementData and elementData.data.recipeInfo then
 						sB:SelectElementData(elementData)
 						return getSchematicText()
@@ -1988,38 +2059,6 @@ if WOW_PROJECT_ID == WOW_PROJECT_MAINLINE then
 	function module:GetShortTitle()
 		return getSchematicText(false)
 	end
-	
-	ProfessionsFrame.CraftingPage.RecipeList.SearchBox:HookScript("OnEditFocusGained", function()
-		if module:shouldPlayHint("SearchBox", nil, nil, nil, 3) then
-			module:ttsQueue("Type a search filter and then press " .. module:getOption("bindingNextEntryButton") .. "to scroll the filtered list. " .. module:getOption("bindingClearFindEntryButton") .. " removes the filter.")
-		end
-	end)
-	
-	ProfessionsFrame.CraftingPage.RecipeList.SearchBox:HookScript("OnTextChanged", function(self, userInput)
-		if userInput then
-			local text = self:GetText()
-			module:ttsInterrupt(text)
-			C_Timer.After(0.5, function()
-				if self:GetText() == text then
-					local data = ProfessionsFrame.CraftingPage.RecipeList.ScrollBox:GetDataProvider()
-					local count = 0
-					for i=1, data:GetSize() do
-						local elementData = data:Find(i)
-						if elementData and elementData.data.recipeInfo then
-							count = count + 1
-							if count > 50 then
-								module:ttsQueue("many search matches; use a better query")
-								return
-							end
-						end
-					end
-					module:ttsQueue(count > 0 and (count .. " |4match:matches") or PROFESSIONS_NO_JOURNAL_ENTRIES)
-				end
-			end)
-		end
-	end)
-	
-	module:overrideEditFocus(ProfessionsFrame.CraftingPage.RecipeList.SearchBox)
 	
 end
 

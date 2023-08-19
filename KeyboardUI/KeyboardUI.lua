@@ -19,6 +19,10 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+### 10.11 (2023-08-19) by Dahk Celes
+- Bugfix for WoW 10.1.5
+- Read reagents in the professions frame
+
 ### 10.10 (2023-05-27) by Dahk Celes
 - Scroll and filter the professions frame
 - Clear action bar slots
@@ -402,7 +406,6 @@ function KeyboardUI:RegisterModule(module)
 			if KeyboardUIOptions[module.name] then
 				module:Init()
 				if KeyboardUIOptions[module.name]["enabled"] then
-					print("foo")
 					module.frame:Show()
 				end
 			else
