@@ -19,6 +19,9 @@ OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
 ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 OTHER DEALINGS IN THE SOFTWARE.
 
+### 11.01 (2024-08-10) by Dahk Celes
+- Updates for WoW: The War Within
+
 ### 10.11 (2023-08-19) by Dahk Celes
 - Bugfix for WoW 10.1.5
 - Read reagents in the professions frame
@@ -1174,15 +1177,15 @@ do
 		end
 	end
 	
-	lib:onEvent(WOW_PROJECT_ID == WOW_PROJECT_CLASSIC and "CURSOR_UPDATE" or "CURSOR_CHANGED", function()
-		if GetMouseFocus() == WorldFrame then
+	lib:onEvent("CURSOR_CHANGED", function()
+		if WorldFrame:IsMouseMotionFocus() then
 			monitorNonPlayers = true
 			C_Timer.After(0, stopMonitoringTooltip)
 		end
 	end)
 	
 	local function monitorWorldFrameTooltips()
-		local mouseFocus = GetMouseFocus()
+		local mouseFocus = GetMouseFocus and GetMouseFocus() or GetMouseFoci and GetMouseFoci()[1]	-- GetMouseFoci() replaces GetMouseFocus() in WoW 11.0.0
 		if mouseFocus == WorldFrame and onEnter and (
 			onEnterSayNPC and monitorNonPlayers and UnitExists("mouseover") and not UnitIsPlayer("mouseover")
 			or onEnterSayGroup and UnitExists("mouseover") and (UnitInParty("mouseover") or UnitInRaid("mouseover"))
@@ -1258,7 +1261,7 @@ do
 	end
 
 	local function monitorUIElementsWithoutTooltip()
-		local mouseFocus = GetMouseFocus()
+		local mouseFocus = GetMouseFocus and GetMouseFocus() or GetMouseFoci and GetMouseFoci()[1]	-- GetMouseFoci() replaces GetMouseFocus() in WoW 11.0.0
 		if mouseFocus and mouseFocus ~= WorldFrame then
 			monitorNonPlayers = nil
 			lastOnEnterPing = nil
@@ -1385,7 +1388,8 @@ end
 -- Options Menu
 
 local panel = CreateFrame("Frame")
-panel.name = "KeyboardUI"
+local category = Settings.RegisterCanvasLayoutCategory(panel, "KeyboardUI")
+Settings.RegisterAddOnCategory(category)
 panel:Hide()	-- important to trigger scrollFrame OnShow()
 
 local kuiOptions = {name = "global", frame = panel, title = TEXT_TO_SPEECH}
@@ -1424,8 +1428,6 @@ function panel.cancel()
 		end
 	end
 end
-
-InterfaceOptions_AddCategory(panel)
 
 local title = panel:CreateFontString("ARTWORK", nil, "GameFontNormalLarge")
 title:SetText("Keyboard User Interface")
@@ -1685,13 +1687,9 @@ end)	-- end of scrollChild:OnShow()
 -- Slash command
 
 function SlashCmdList.KEYBOARDUI(msg)
-	if InterfaceAddOnsList_Update and (WOW_PROJECT_ID == WOW_PROJECT_CLASSIC or WOW_PROJECT_ID == WOW_PROJECT_WRATH_CLASSIC) then
-		InterfaceAddOnsList_Update()	-- https://github.com/Stanzilla/WoWUIBugs/issues/89
-		InterfaceOptionsFrame_OpenToCategory(panel)
-	else
-		-- WoW 10.x
-		Settings.OpenToCategory(panel.name)
-	end
+
+	Settings.OpenToCategory(category:GetID())
+	
 	-- give the user a hint
 	modules[1]:ttsStop()
 	local hintText = [=[<speak>Keyboard UI Options.  Keyboard UI has various keybindings which activate only outside combat, and only while a keyboard-enabled window appears.

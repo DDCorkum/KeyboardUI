@@ -81,15 +81,33 @@ do
 		end
 	end
 	
-	GameMenuButtonStore:HookScript("OnClick", function()
-		msg = module:ttsInterrupt("Warning: You have openned the in-game shop for purchasing cosmetic items.  Keyboard UI is forbidden from helping you navigate this frame for security reasons.   Pressing escape should close the window safely.", KUI_NORMAL, KUI_FF)
-	end)
+	if C_StorePublic.IsEnabled() then
+		local function shopWarning()
+			module:ttsInterrupt("Warning: You have openned the in-game shop for purchasing cosmetic items with real money.  Keyboard UI is forbidden from helping you navigate this frame for security reasons.   Pressing escape should close the window safely.", KUI_NORMAL, KUI_FF)
+		end
+		
+		if GameMenuFrame.InitButtons then
+			-- WoW 11.0
+			hooksecurefunc(GameMenuFrame, "InitButtons", function()
+				for _, frame in ipairs({GameMenuFrame:GetChildren()}) do
+					if frame:IsObjectType("Button") and frame:GetText() == BLIZZARD_STORE then
+						frame:HookScript("OnClick", shopWarning)
+						break
+					end
+				end
+			end)
+		elseif GameMenuButtonStore then
+			-- Prior to WoW 11.0
+			GameMenuButtonStore:HookScript("OnClick", shopWarning)
+		end
+	end
 
 end -- end of GameMenu
 
 do
 
-	local entry, entries, labels, propertyNames = 0, {}, {}, {}
+	local entry, entries, labels = 0, {}, {}
+
 	local currentPanel = nil
 
 	local module =
@@ -130,8 +148,27 @@ do
 			-- WoW 10.x
 			if SettingsPanel.GameTab:IsSelected() then
 				SettingsPanel.AddOnsTab:Click()
+				module:ttsUnblock()
+				if SettingsPanel:GetCurrentCategory():GetCategorySet() == 1 then
+					local categories = SettingsPanel:GetAllCategories()
+					for i=1, #categories do
+						if categories[i]:GetCategorySet() == 2 then
+							SettingsPanel:SelectCategory(categories[i])
+							return ADDONS .. " " .. SETTINGS .. CHAT_HEADER_SUFFIX .. SettingsPanel:GetCurrentCategory():GetName()
+						end
+					end
+				else
+					return ADDONS .. " " .. SETTINGS
+				end
 			else
 				SettingsPanel.GameTab:Click()
+				module:ttsUnblock()
+				if SettingsPanel:GetCurrentCategory():GetCategorySet() == 2 then
+					SettingsPanel:SelectCategory(SettingsPanel:GetAllCategories()[1])
+					return GAME .. " " .. SETTINGS .. CHAT_HEADER_SUFFIX .. SettingsPanel:GetCurrentCategory():GetName()
+				else
+					return GAME .. " " .. SETTINGS
+				end
 			end
 		end
 	end
@@ -179,6 +216,7 @@ do
 			for i=1, #categories do
 				if currentCategory == categories[i] then
 					SettingsPanel:SelectCategory(categories[i < #categories and i+1 or 1])
+					return SettingsPanel:GetCurrentCategory():GetName()
 				end
 			end
 		end
@@ -223,7 +261,7 @@ do
 			for i=1, #categories do
 				if currentCategory == categories[i] then
 					SettingsPanel:SelectCategory(categories[i > 1 and i-1 or #categories])
-					break
+					return SettingsPanel:GetCurrentCategory():GetName()
 				end
 			end
 		end
@@ -269,9 +307,6 @@ do
 				if text and text ~= "" then
 					tinsert(entries, frame)
 					tinsert(labels, text)
-					if frame:GetParent().data then
-						propertyNames[#entries] = frame:GetParent().data.name
-					end
 				end
 			elseif frame:IsObjectType("Slider") then
 				local label = frame:GetName() and _G[frame:GetName().."Label"] and _G[frame:GetName().."Label"]:IsVisible() and _G[frame:GetName().."Label"]:GetText() or frame.text and frame.text:GetText()
@@ -297,12 +332,10 @@ do
 				else
 					tinsert(labels, "Dropdown")
 				end
-			elseif frame:GetObjectType() == "Frame" and frame.DecrementButton and frame.IncrementButton and frame:GetParent().Text and frame.Button and frame.Button.SelectionDetails then
+			elseif frame:GetObjectType() == "Button" and frame:GetParent().Dropdown == frame and not frame:GetParent():GetParent().Checkbox and frame:GetParent().IncrementButton then
+				-- SettingsDropdownControlMixin, but not SettingsCheckboxDropdownControlMixin
 				tinsert(entries, frame)
-				tinsert(labels, frame:GetParent().Text:GetText() .. " slider")
-				if frame:GetParent().data then
-					propertyNames[#entries] = frame:GetParent().data.name
-				end
+				tinsert(labels, frame:GetParent():GetParent().Text:GetText())
 			elseif frame:IsObjectType("ScrollFrame") or frame:GetObjectType() == "Frame" then
 				parseFrame(frame)
 			end
@@ -312,7 +345,6 @@ do
 	local function generateLists(frame)
 		wipe(entries)
 		wipe(labels)
-		wipe(propertyNames)
 		if frame then
 			local scale = frame:GetScale()
 			frame:SetScale(0.0001)
@@ -356,7 +388,7 @@ do
 			end
 		end
 		local new = entry + 1
-		while new < #entries do
+		while new <= #entries do
 			if entries[new]:IsShown() and (entries[new].IsEnabled and entries[new]:IsEnabled() or not entries[new].IsEnabled) then
 				entry = new		
 				return labels[entry] .. "; " .. (getStatus(entries[entry]) or "")
@@ -382,9 +414,34 @@ do
 		end
 	end
 
+	local function isBlizzardSettings()
+		if entry > 0 then
+			local frame = entries[entry]
+			return SettingsPanel and SettingsPanel.Container and SettingsPanel.Container.SettingsList and SettingsPanel.Container.SettingsList:IsShown() and (frame:GetParent().data or frame:GetParent():GetParent().data)
+		else
+			return SettingsPanel and SettingsPanel.Container and SettingsPanel.Container.SettingsList and SettingsPanel.Container.SettingsList:IsShown()
+		end
+	end
+
 	function module:Forward()
 		if entry > 0 then
 			local frame = entries[entry]
+			if isBlizzardSettings() then
+				local parentData = frame:GetParent().data or frame:GetParent():GetParent().data
+				if parentData.sliderSetting and parentData.sliderOptions then
+					-- SettingsCheckboxSliderControlMixin and MinimalSliderWithSteppersTemplate
+					frame:GetParent().SliderWithSteppers.Forward:Click()
+					return frame:GetParent().SliderWithSteppers.RightText:GetText() -- parentData.sliderSetting:GetValue()
+				elseif parentData.cbSetting and parentData.dropdownSetting then
+					-- SettingsCheckboxDropdownControlMixin
+					frame:GetParent().Control.IncrementButton:Click()
+					return frame:GetParent().Control.Dropdown:GetText()
+				elseif parentData.setting and frame:GetParent().Dropdown == frame and frame:GetParent().IncrementButton then
+					-- SettingsDropdownControlMixin
+					frame:GetParent().IncrementButton:Click()
+					return frame:GetText()
+				end
+			end
 			if frame:IsObjectType("Slider") then
 				local min, max = frame:GetMinMaxValues()
 				local value = frame:GetValue()
@@ -397,27 +454,31 @@ do
 					frame:SetValue(value + step)
 				end
 				return getStatus(frame)
-			elseif frame.IncrementButton then
-				frame.IncrementButton:Click()
-				if propertyNames[entry] and SettingsPanel.Container.SettingsList:IsShown() then
-					SettingsPanel.Container.SettingsList:ScrollToElementByName(propertyNames[entry])
-					for __, newFrame in ipairs({SettingsPanel.Container.SettingsList.ScrollBox.ScrollTarget:GetChildren()}) do
-						if newFrame.data and newFrame.data.name == propertyNames[entry] then
-							frame = newFrame
-							break
-						end
-					end
-				end
-				return getStatus(frame)
-			else
-				return self:DoAction()
 			end
+			return self:DoAction()
 		end
 	end
 
 	function module:Backward()
 		if entry > 0 then
 			local frame = entries[entry]
+			local frame = entries[entry]
+			if isBlizzardSettings() then
+				local parentData = frame:GetParent().data or frame:GetParent():GetParent().data
+				if parentData.sliderSetting and parentData.sliderOptions then
+					-- SettingsCheckboxSliderControlMixin and MinimalSliderWithSteppersTemplate
+					frame:GetParent().SliderWithSteppers.Back:Click()
+					return frame:GetParent().SliderWithSteppers.RightText:GetText() -- parentData.sliderSetting:GetValue()
+				elseif parentData.cbSetting and parentData.dropdownSetting then
+					-- SettingsCheckboxDropdownControlMixin
+					frame:GetParent().Control.DecrementButton:Click()
+					return frame:GetParent().Control.Dropdown:GetText()
+				elseif parentData.setting and frame:GetParent().Dropdown == frame and frame:GetParent().DecrementButton then
+					-- SettingsDropdownControlMixin
+					frame:GetParent().DecrementButton:Click()
+					return frame:GetText()
+				end
+			end
 			if frame:IsObjectType("Slider") then
 				local min, max = frame:GetMinMaxValues()
 				local value = frame:GetValue()
@@ -459,7 +520,7 @@ do
 		end
 		return nil, nil, nil, nil, OKAY, CANCEL, DEFAULTS
 	end
-	
+		
 	function module:DoAction(index)
 		if index == 5 then
 			(InterfaceOptionsFrameOkay or SettingsPanel.CloseButton):Click()
@@ -469,14 +530,23 @@ do
 			InterfaceOptionsFrameDefaults:Click()
 		elseif index == 7 and SettingsPanel.Container.SettingsList.Header.DefaultsButton:IsVisible() then
 			SettingsPanel.Container.SettingsList.Header.DefaultsButton:Click()
-		elseif entry > 0 then
+		elseif entry > 0 then				
 			local frame = entries[entry]
-			if propertyNames[entry] and SettingsPanel.Container.SettingsList:IsShown() then
-				SettingsPanel.Container.SettingsList:ScrollToElementByName(propertyNames[entry])
-				for __, newFrame in ipairs({SettingsPanel.Container.SettingsList.ScrollBox.ScrollTarget:GetChildren()}) do
-					if newFrame.data and newFrame.data.name == propertyNames[entry] then
-						frame = newFrame.CheckBox or newFrame.DropDown
-						break
+			if isBlizzardSettings() then
+				local parentData = frame:GetParent().data or frame:GetParent():GetParent().data
+				if parentData.cbSetting and parentData.sliderSetting then
+					-- SettingsCheckboxSliderControlMixin
+					parentData.cbSetting:SetValue(not parentData.cbSetting:GetValue())
+					return parentData.cbSetting:GetValue() and ("Checked: " .. frame:GetParent().SliderWithSteppers.RightText:GetText()) or "Unchecked"
+				elseif parentData.cbSetting and parentData.dropdownSetting then
+					-- SettingsCheckboxDropdownControlMixin
+					frame:Click()
+					return parentData.cbSetting:GetValue() and ("Checked: " .. frame:GetParent().Control.Dropdown:GetText()) or "Unchecked"
+				elseif parentData.setting then
+					if parentData.setting:GetVariableType() == "boolean" then
+						-- SettingsCheckboxControlMixin
+						frame:Click()
+						return parentData.setting:GetValue() and "Checked" or "Unchecked"
 					end
 				end
 			end

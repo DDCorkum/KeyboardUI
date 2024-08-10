@@ -95,7 +95,7 @@ do
 			if speaker and speaker ~= previousSpeaker then
 				module:ttsInterrupt("<speak><silence msec=\"300\" />" .. CHAT_SAY_GET:format(GossipFrameTitleText:GetText()) .. "<silence msec=\"100\" />" .. getGreetingText():gsub("[\<\>\"]", " -- ") .. "</speak>")
 			else
-				module:ttsInterrupt("<speak><silence msec=\"500\" />" .. getGreetingText():gsub("[\<\>\"]", " -- ") .. "</speak>")
+				module:ttsInterrupt("<speak><silence msec=\"50\" />" .. getGreetingText():gsub("[\<\>\"]", " -- ") .. "</speak>")
 			end
 			previousSpeaker = speaker
 		end
@@ -149,7 +149,7 @@ do
 		C_Timer.After(0.2, function()
 			local title, content, criteria = self:GetEntryLongDescription()
 			if title and title ~= "" and not (TalkingHeadFrame and TalkingHeadFrame:IsVisible()) then
-				module:ttsInterrupt("<speak><silence msec=\"1800\" />" .. title:gsub("[\<\>]", " -- ") .. "</speak>", KUI_QUICK, KUI_MF)
+				module:ttsInterrupt("<speak><silence msec=\"1500\" />" .. title:gsub("[\<\>]", " -- ") .. "</speak>", KUI_QUICK, KUI_MF)
 				module:ttsQueue(content, KUI_CASUAL, KUI_MP)
 				module:ttsQueue(criteria, KUI_NORMAL, KUI_MF)		
 			end

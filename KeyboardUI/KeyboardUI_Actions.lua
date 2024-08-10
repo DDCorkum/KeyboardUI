@@ -172,7 +172,7 @@ end)
 -------------------------
 -- SpellBookFrame
 
-do
+if SPELLS_PER_PAGE then		-- needs updating for WoW 11.0
 	local book, tab, slot, flyout = 0, 0, 0, 0
 	
 	local useActionSlots = false
